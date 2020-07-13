@@ -270,7 +270,7 @@ std::string Op::op_to_string(const OpBase* ptr)
     case OP_EW_MUL:
       return "Mul";
     case OP_MATMUL:
-      return "Matmul";
+      return "MatMul";
     case OP_MUL:
       return "Mul";
     case OP_ENLARGE:
