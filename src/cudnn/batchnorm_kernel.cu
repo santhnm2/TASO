@@ -89,6 +89,7 @@ void BatchNorm::forward(bool block)
       1.0, runningMean, runningVar, CUDNN_BN_MIN_EPSILON, saveMean, saveVar));
   } else {
 #endif
+    printf("min epsilon: %f\n", CUDNN_BN_MIN_EPSILON);
     checkCUDNN(cudnnBatchNormalizationForwardInference(
       model->dnn, mode, &alpha, &beta, inputTensor, inputs[0].data_ptr,
       outputTensor, outputs[0].data_ptr, biasTensor, inputs[1].data_ptr, inputs[2].data_ptr,
@@ -149,8 +150,9 @@ void Model::measure_batchnorm_cost(BatchNorm* bn)
   float milliseconds;
   cudaEventElapsedTime(&milliseconds, startEvent, endEvent);
   bn->runtime = milliseconds / REPEAT_TIMES;
-  printf("measure[BatchNorm]: i(%d %d %d %d) cost(%.4lf)\n",
-         BATCH_SIZE, bn->inputs[0].dim[1], bn->inputs[0].dim[2],
-         bn->inputs[0].dim[3], bn->runtime);
+  if (print_cost)
+    printf("measure[BatchNorm]: i(%d %d %d %d) cost(%.4lf)\n",
+           BATCH_SIZE, bn->inputs[0].dim[1], bn->inputs[0].dim[2],
+           bn->inputs[0].dim[3], bn->runtime);
 }
 

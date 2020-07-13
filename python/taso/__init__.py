@@ -213,6 +213,10 @@ def _conv2d(op, graph, tensors, initializer):
     pads = _get_conv_pool_pads_attr(attrs)
     strides = attrs["strides"]
     outputs = graph.conv2d(input=inputs[0], weight=inputs[1], strides=strides, padding=pads)
+    if len(inputs) > 2:
+        dim = inputs[2].dim(0)
+        reshaped_bias = graph.reshape(inputs[2], (1, dim, 1, 1))
+        outputs = graph.add(outputs, reshaped_bias)
     return outputs
 
 def _div(op, graph, tensors, initializer):
@@ -267,6 +271,8 @@ def _gemm(op, graph, tensors, initializer):
     if "transB" in attrs and attrs["transB"] == 1:
         inputs[1] = graph.transpose(inputs[1], (1,0), shuffle=True)
     outputs = graph.matmul(inputs[0], inputs[1])
+    if len(inputs) > 2:
+        outputs = graph.add(outputs, inputs[2])
     return outputs
 
 def _greater(op, graph, tensors, initializer):
@@ -789,7 +795,7 @@ def load_onnx(filename):
         idx += 1
     assert len(node_list) == len(model.graph.node), "Internal error when reording ONNX operators"
 
-    # Add nodse into TASO graph
+    # Add nodes into TASO graph
     cnt = 0
     for opname in node_list:
         op = name_to_op[opname]
@@ -820,7 +826,7 @@ input_weight_names['Concat'] = ['input1', 'input2', 'input3', 'input4', 'input5'
 input_weight_names['Conv'] = ['input', 'weight', 'bias']
 input_weight_names['MatMul'] = ['input', 'weight']
 input_weight_names['Mul'] = ['input1', 'input2']
-input_weight_names['Reshpe'] = ['input', 'shape']
+input_weight_names['Reshape'] = ['input', 'shape']
 input_weight_names['BroadcastAdd'] = ['input1', 'input2']
 input_weight_names['Transpose'] = ['input']
 
