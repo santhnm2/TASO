@@ -183,8 +183,8 @@ cdef class PyGraph:
         t = ctypes.cast(<unsigned long long>handle, ctypes.c_void_p)
         return PyTensor(t)
 
-    def batchnorm(self, PyTensor input, PyTensor scale, PyTensor bias, PyTensor mean, PyTensor var):
-        cdef TensorHandle handle = self.p_graph.batchnorm(input.ctensor, scale.ctensor, bias.ctensor, mean.ctensor, var.ctensor)
+    def batchnorm(self, PyTensor input, PyTensor scale, PyTensor bias, PyTensor mean, PyTensor var, float epsilon = -1):
+        cdef TensorHandle handle = self.p_graph.batchnorm(input.ctensor, scale.ctensor, bias.ctensor, mean.ctensor, var.ctensor, epsilon)
         t = ctypes.cast(<unsigned long long>handle, ctypes.c_void_p)
         return PyTensor(t)
 
@@ -650,5 +650,7 @@ cdef class PyGraph:
         elif attrname == 'axes':
             # FIXME
             return [0]
+        elif attrname == 'epsilon':
+            return self.p_graph.get_operator_float_attr(op.guid, PM_EPSILON)
         else:
            assert False, 'Internal error: unknow attribute {}'.format(attrname)
