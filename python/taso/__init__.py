@@ -392,9 +392,9 @@ def _avgpool2d(op, graph, tensors, initializer):
 def _globalavgpool2d(op, graph, tensors, initializer):
     inputs = _get_inputs(op, graph, tensors, initializer)
     assert len(inputs) == 1, "GlobalAvgPool2D requires exactly one input"
-    dim = inputs[0].dim(-1)
+    dim = inputs[0].dim(inputs[0].nDim-1)
     kernels = [dim, dim]
-    strides = [dim, dim]
+    strides = [1, 1]
     pads = "VALID"
     outputs = graph.avgpool2d(input=inputs[0], kernels=kernels, strides=strides, padding=pads)
     return outputs
