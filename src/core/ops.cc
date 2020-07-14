@@ -345,6 +345,14 @@ std::string Op::op_to_string(const OpBase* ptr)
       return "Slice";
     case OP_RESIZE:
       return "Resize";
+    case OP_FUSE_CONV_BATCHNORM:
+      return "FuseConvBatchnorm";
+    case OP_FUSE_CONV_BATCHNORM_ALPHA_VAR:
+      return "FuseConvBatchnormAlphaVar";
+    case OP_FUSE_CONV_BATCHNORM_BIAS:
+      return "FuseConvBatchnormBias";
+    case OP_BROADCAST_ADD:
+      return "BroadcastAdd";
     default:
       return "Unknown_" + std::to_string(ptr->type);
   }
