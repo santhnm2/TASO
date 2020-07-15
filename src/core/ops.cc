@@ -531,8 +531,16 @@ Graph* Graph::preprocess_weights(void)
   while (true) {
     bool change = false;
     for (opIt = newGraph->inEdges.begin(); opIt != newGraph->inEdges.end(); opIt++) {
-      if (opIt->first.ptr->type == OP_INPUT || opIt->first.ptr->type == OP_WEIGHT)
+      if (opIt->first.ptr->type == OP_INPUT || opIt->first.ptr->type == OP_WEIGHT) {
         continue;
+      } else if (opIt->first.ptr->type == OP_TRANSPOSE) {
+        // NOTE: We skip OP_TRANSPOSE here because the kernel implementation
+        // of OP_TRANSPOSE is currently a no-op, and therefore the correct
+        // output will not be returned. To mitigate this, we should
+        // implement the cuBLAS transpose operator and/or add an OP_GEMM
+        // to automatically transpose inputs.
+        continue;
+      }
       bool allWeights = true;
       const std::set<Edge, EdgeCompare>& list = opIt->second;
       std::set<Edge, EdgeCompare>::const_iterator it;
@@ -793,7 +801,7 @@ void Graph::replace_node(Op oldOp, Op newOp)
 void Graph::remove_node(Op oldOp)
 {
   assert(outEdges.find(oldOp) != outEdges.end());
-  // Asser that it is safe to remove the node
+  // Assert that it is safe to remove the node
   assert(outEdges[oldOp].size() == 0);
   const std::set<Edge, EdgeCompare>& inSet = inEdges[oldOp];
   std::set<Edge, EdgeCompare>::const_iterator it;
@@ -1386,6 +1394,15 @@ float Graph::run(void)
   assert(opList.size() == opBaseList.size());
 
   return model->measure_oplist_runtime(opBaseList);
+}
+
+void Graph::print_ops(void)
+{
+  std::map<Op, std::set<Edge, EdgeCompare>, OpCompare>::const_iterator it;
+  for (it = inEdges.begin(); it != inEdges.end(); it++) {
+    Op op = it->first;
+    printf("%s\n", op.to_string().c_str());
+  }
 }
 
 void Graph::print_costs(void)
