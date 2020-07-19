@@ -643,6 +643,7 @@ public:
   Op find_op_or_fail(size_t guid);
   Graph* optimize(float alpha, int budget, bool print_subst);
   Graph* preprocess_weights(void);
+  int get_input_list(Op* opList, size_t maxNumOps);
   int get_operator_list(Op* opList, size_t maxNumOps);
   int get_input_edges(Edge* opList, size_t guid);
   OpType get_operator_type(size_t guid);
@@ -650,6 +651,7 @@ public:
   float get_operator_float_attr(size_t guid, PMParameter attr);
   int get_num_outputs(size_t guid);
   int get_input_dims(size_t guid, int* dims, int idx);
+  void set_input_value(size_t guid, DATATYPE* value);
   void get_weight_value(size_t guid, DATATYPE* value);
   int get_output_dims(size_t guid, int* dims, int idx);
   int get_split_lens(size_t guid, int* lens);
@@ -661,6 +663,7 @@ public:
   bool has_loop(void);
   float total_cost(void);
   float run();
+  void print_ops(void);
   void print_costs(void);
   void print_measurements(void);
 #ifdef TRT
@@ -672,6 +675,8 @@ private:
 private:
   TensorHandle input_wrapper(const TensorHandle _input);
   TensorHandle weight_wrapper(const TensorHandle _weight);
+  int get_operator_list_helper(Op* opList, size_t maxNumOps, bool includeOps,
+                               bool includeInputs, bool includeWeights);
 public:
   Model *model;
   float totalCost;

@@ -630,7 +630,18 @@ Op Graph::find_op_or_fail(size_t guid)
   assert(false);
 }
 
+int Graph::get_input_list(Op* ops, size_t maxNumOps)
+{
+  return get_operator_list_helper(ops, maxNumOps, false, true, false);
+}
+
 int Graph::get_operator_list(Op* ops, size_t maxNumOps)
+{
+  return get_operator_list_helper(ops, maxNumOps, true, false, false);
+}
+
+int Graph::get_operator_list_helper(Op* ops, size_t maxNumOps, bool includeOps,
+                                    bool includeInputs, bool includeWeights)
 {
   std::map<Op, int, OpCompare> todos;
   std::map<Op, std::set<Edge, EdgeCompare>, OpCompare>::const_iterator it;
@@ -650,10 +661,16 @@ int Graph::get_operator_list(Op* ops, size_t maxNumOps)
   size_t cnt = 0, i = 0;
   while (i < opList.size()) {
     Op op = opList[i++];
-    if ((op.ptr->type == OP_INPUT) || (op.ptr->type == OP_WEIGHT)) {
+    bool include = false;
+    if (op.ptr->type == OP_INPUT) {
+      include = includeInputs;
+    } else if (op.ptr->type == OP_WEIGHT) {
+      include = includeWeights;
     } else {
-      ops[cnt++] = op;
+      include = includeOps;
     }
+    if (include)
+      ops[cnt++] = op;
     std::set<Edge, EdgeCompare> outList = outEdges[op];
     std::set<Edge, EdgeCompare>::const_iterator it2;
     for (it2 = outList.begin(); it2 != outList.end(); it2++) {
@@ -673,6 +690,8 @@ int Graph::get_input_edges(Edge* ops, size_t guid)
   assert(inEdges.find(op) != inEdges.end());
   std::set<Edge, EdgeCompare> inList = inEdges[op];
   size_t cnt = inList.size();
+  if (cnt == 0)
+    return cnt;
   std::set<Edge, EdgeCompare>::const_iterator it2;
   for (it2 = inList.begin(); it2 != inList.end(); it2 ++) {
     Edge e = *it2;
@@ -722,6 +741,19 @@ int Graph::get_input_dims(size_t guid, int* dims, int idx)
   for (int i = 0; i < ndim; i++)
     dims[i] = op.ptr->inputs[idx].dim[i];
   return ndim;
+}
+
+void Graph::set_input_value(size_t guid, DATATYPE* value)
+{
+  Op op = find_op_or_fail(guid);
+  // Assume input op has one input and one output
+  assert(op.ptr->type == OP_INPUT);
+  assert(op.ptr->numInputs == 1);
+  assert(op.ptr->numOutputs == 1);
+  size_t size = sizeof(DATATYPE) * op.ptr->inputs[0].volume();
+  if (op.ptr->inputs[0].data_ptr == NULL)
+    op.ptr->inputs[0].data_ptr = (DATATYPE*) model->allocate_memory(size);
+  model->copy_memory((DATATYPE*) op.ptr->inputs[0].data_ptr, value, size);
 }
 
 void Graph::get_weight_value(size_t guid, DATATYPE* value)

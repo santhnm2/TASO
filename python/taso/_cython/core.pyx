@@ -542,6 +542,15 @@ cdef class PyGraph:
         graph = ctypes.cast(<unsigned long long>new_graph, ctypes.c_void_p)
         return PyGraph(graph)
 
+    def get_input_list(self):
+        cdef Op ops[4192]
+        cdef int numOps = self.p_graph.get_input_list(ops, 4192)
+        opList = list()
+        for i in range(numOps):
+            #print(ops[i].guid)
+            opList.append(ops[i])
+        return opList
+
     def get_operator_list(self):
         cdef Op ops[4192]
         cdef int numOps = self.p_graph.get_operator_list(ops, 4192)
@@ -566,6 +575,14 @@ cdef class PyGraph:
         for i in range(ndims):
             dimlist.append(dims[i])
         return dimlist
+
+    def set_input_value(self, Op op, data):
+        cdef array.array arr
+        if isinstance(data, np.ndarray):
+            arr = array.array('f', data.flatten().tolist())
+        else:
+            arr = array.array('f', data)
+        self.p_graph.set_input_value(op.guid, arr.data.as_floats)
 
     def get_weight_value(self, Op op):
         dims = self.get_input_dims(op, 0)
