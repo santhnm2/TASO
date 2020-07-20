@@ -663,6 +663,7 @@ public:
   bool has_loop(void);
   float total_cost(void);
   float run();
+  void evaluate(size_t guid, int idx, float* output, bool verbose);
   void print_ops(void);
   void print_costs(void);
   void print_measurements(void);

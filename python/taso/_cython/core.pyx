@@ -179,6 +179,14 @@ cdef class PyGraph:
     def cost(self):
         return self.p_graph.total_cost()
 
+    def evaluate(self, Op op, int idx, bool verbose = False):
+        dims = self.get_output_dims(op, idx)
+        data = np.zeros(shape=dims)
+        val = array.array('f', data.flatten().tolist())
+        cdef array.array arr = val
+        self.p_graph.evaluate(op.guid, idx, arr.data.as_floats, verbose)
+        return np.asarray(val)
+
     #def __dealloc__(self):
         #t = ctypes.cast(<unsigned long long>self.p_graph, ctypes.c_void_p)
         #print(t)

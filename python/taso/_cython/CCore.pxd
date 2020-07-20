@@ -275,3 +275,4 @@ cdef extern from "taso/ops.h" namespace "taso":
         void print_measurements()
         float total_cost()
         float run()
+        void evaluate(size_t guid, int idx, float* output, bool verbose)

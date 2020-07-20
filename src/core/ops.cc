@@ -15,6 +15,7 @@
 
 #include "taso/ops.h"
 #include "taso/substitution.h"
+#include "taso/cuda_helper.h"
 #include <iostream>
 #include <fstream>
 using namespace std;
@@ -745,6 +746,7 @@ int Graph::get_input_dims(size_t guid, int* dims, int idx)
 
 void Graph::set_input_value(size_t guid, DATATYPE* value)
 {
+  assert(value != NULL);
   Op op = find_op_or_fail(guid);
   // Assume input op has one input and one output
   assert(op.ptr->type == OP_INPUT);
@@ -1451,3 +1453,74 @@ void Graph::print_costs(void)
          mem_acc * 4.0 / 1024.0 / 1024.0, num_kernels);
 }
 
+void Graph::evaluate(size_t guid, int idx, float* output, bool verbose)
+{
+  Op output_op = find_op_or_fail(guid);
+
+  Op ops[4192];
+  int num_ops = get_operator_list_helper(ops, 4192, true, true, true);
+
+  if (verbose) {
+    // TODO: Replace with call to print_ops
+    printf("===> All ops:\n");
+    for (int i = 0; i < num_ops; i++) {
+      printf("======> %3d) %s\n", i, ops[i].to_string().c_str());
+    }
+  }
+  for (int i = 0; i < num_ops; i++) {
+      if (verbose) {
+        printf("===> Running op %s (%zu)...\n", ops[i].to_string().c_str(), ops[i].guid);
+      }
+      OpType op_type = get_operator_type(ops[i].guid);
+      if (op_type != OP_INPUT && op_type != OP_WEIGHT) {
+          // Assign input edge output pointers to current op's input pointers
+          Edge in_edges[128];
+          int num_in_edges = get_input_edges(in_edges, ops[i].guid);
+          for (int j = 0; j < num_in_edges; j++) {
+            Edge edge = in_edges[j];
+            assert(edge.dstOp.guid == ops[i].guid);
+            if (verbose) {
+             printf("======> Assigning output %d of op %s to input %d of op %s\n",
+                    edge.srcIdx, edge.srcOp.to_string().c_str(), edge.dstIdx,
+                    edge.dstOp.to_string().c_str());
+            }
+            ops[i].ptr->inputs[edge.dstIdx].data_ptr = edge.srcOp.ptr->outputs[edge.srcIdx].data_ptr;
+          }
+      }
+
+      // Run op
+      ops[i].ptr->map();
+      ops[i].ptr->forward(true);
+  }
+
+  // Collect output
+  size_t output_volume = output_op.ptr->outputs[idx].volume();
+  checkCUDA(cudaMemcpy(output, output_op.ptr->outputs[idx].data_ptr,
+                       output_volume * sizeof(float), cudaMemcpyDeviceToHost));
+  if (verbose) {
+      printf("===> Output snippet:\n");
+      for (size_t i = 0; i < output_volume; i++) {
+        if (i == 20)
+          break;
+        if (i % 10 == 0)
+          printf("      ");
+        if ((i+1) % 10 != 0) {
+          printf("%f ", output[i]);
+        } else {
+          printf("%f\n", output[i]);
+        }
+      }
+      printf("\n");
+  }
+
+  // Clean up
+  if (verbose) {
+    printf("===> Cleaning up...\n");
+  }
+  for (int i = 0; i < num_ops; i++) {
+      if (verbose) {
+        printf("======> Unmapping op %s\n", ops[i].to_string().c_str());
+      }
+      ops[i].ptr->unmap();
+  }
+}

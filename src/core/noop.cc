@@ -110,7 +110,9 @@ void NoOp::unmap(void)
 {}
 
 void NoOp::forward(bool block)
-{}
+{
+  outputs[0].data_ptr = inputs[0].data_ptr;
+}
 
 void NoOp::collect_costs(float& exe_time, float& flops,
                          float& mem_acc, int& num_kernels)
