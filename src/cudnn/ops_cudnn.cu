@@ -75,6 +75,17 @@ float Model::measure_oplist_runtime(const std::vector<OpBase*>& opBaseList)
   return milliseconds / num_runs;
 }
 
+void Model::evaluate(const std::vector<OpBase*>& opBaseList, float* output)
+{
+  size_t num_ops = opBaseList.size();
+  assert(opBaseList[num_ops-1]->numOutputs == 1);
+  for (int i = 0; i < num_ops; i++)
+    opBaseList[i]->forward();
+  size_t output_volume = opBaseList[num_ops-1]->outputs[0].volume();
+  checkCUDA(cudaMemcpy(output, opBaseList[num_ops-1]->outputs[0].data_ptr,
+                       output_volume * sizeof(float), cudaMemcpyDeviceToHost));
+}
+
 void* Model::allocate_memory(size_t size, const DATATYPE* data_initial)
 {
   void* ptr;

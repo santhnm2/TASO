@@ -179,12 +179,13 @@ cdef class PyGraph:
     def cost(self):
         return self.p_graph.total_cost()
 
-    def evaluate(self, Op op, int idx, bool verbose = False):
-        dims = self.get_output_dims(op, idx)
+    def evaluate(self):
+        ops = self.get_operator_list()
+        dims = self.get_output_dims(ops[-1], 0)
         data = np.zeros(shape=dims)
         val = array.array('f', data.flatten().tolist())
         cdef array.array arr = val
-        self.p_graph.evaluate(op.guid, idx, arr.data.as_floats, verbose)
+        self.p_graph.evaluate(arr.data.as_floats)
         return np.asarray(val)
 
     #def __dealloc__(self):
@@ -553,6 +554,15 @@ cdef class PyGraph:
     def get_input_list(self):
         cdef Op ops[4192]
         cdef int numOps = self.p_graph.get_input_list(ops, 4192)
+        opList = list()
+        for i in range(numOps):
+            #print(ops[i].guid)
+            opList.append(ops[i])
+        return opList
+
+    def get_weight_list(self):
+        cdef Op ops[4192]
+        cdef int numOps = self.p_graph.get_weight_list(ops, 4192)
         opList = list()
         for i in range(numOps):
             #print(ops[i].guid)

@@ -475,6 +475,7 @@ public:
   virtual void unmap(void) = 0;
   virtual void collect_costs(float& exe_time, float& flops,
                              float& mem_acc, int& num_kernels) = 0;
+  void set_input(int idx, void* data);
 public:
   Tensor inputs[MAX_NUM_INPUTS], outputs[MAX_NUM_OUTPUTS];
   int numInputs, numOutputs;
@@ -644,6 +645,7 @@ public:
   Graph* optimize(float alpha, int budget, bool print_subst);
   Graph* preprocess_weights(void);
   int get_input_list(Op* opList, size_t maxNumOps);
+  int get_weight_list(Op* opList, size_t maxNumOps);
   int get_operator_list(Op* opList, size_t maxNumOps);
   int get_input_edges(Edge* opList, size_t guid);
   OpType get_operator_type(size_t guid);
@@ -662,8 +664,9 @@ public:
   bool check_correctness(void);
   bool has_loop(void);
   float total_cost(void);
+  void instantiate_ops(std::vector<Op>& opList, std::vector<OpBase*>& opBaseList);
   float run();
-  void evaluate(size_t guid, int idx, float* output, bool verbose);
+  void evaluate(float* output);
   void print_ops(void);
   void print_costs(void);
   void print_measurements(void);
@@ -1455,6 +1458,7 @@ public:
   void* allocate_memory(size_t size, const DATATYPE* initial_data= NULL);
   bool copy_memory(DATATYPE* dst, const DATATYPE* src, size_t size);
   float measure_oplist_runtime(const std::vector<OpBase*>& list);
+  void evaluate(const std::vector<OpBase*>& list, float* output);
   bool broadcastable(const Tensor& t1, const Tensor& t2);
 public:
   bool isTraining;

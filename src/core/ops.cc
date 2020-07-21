@@ -174,6 +174,12 @@ OpBase::OpBase(int n, Tensor* _inputs, Model* _model, OpType _type)
   }
 }
 
+void OpBase::set_input(int idx, void* data)
+{
+  assert(idx <= numInputs - 1);
+  inputs[idx].data_ptr = data;
+}
+
 bool OpBase::get_int_parameter(PMParameter para, int* value)
 {
   switch (para) {
@@ -634,6 +640,11 @@ Op Graph::find_op_or_fail(size_t guid)
 int Graph::get_input_list(Op* ops, size_t maxNumOps)
 {
   return get_operator_list_helper(ops, maxNumOps, false, true, false);
+}
+
+int Graph::get_weight_list(Op* ops, size_t maxNumOps)
+{
+  return get_operator_list_helper(ops, maxNumOps, false, false, true);
 }
 
 int Graph::get_operator_list(Op* ops, size_t maxNumOps)
@@ -1191,12 +1202,11 @@ bool Graph::has_loop(void)
   return (opList.size() < inEdges.size());
 }
 
-float Graph::run(void)
+void Graph::instantiate_ops(std::vector<Op>& opList,
+                            std::vector<OpBase*>& opBaseList)
 {
   std::map<Op, int, OpCompare> todos;
   std::map<Op, std::set<Edge, EdgeCompare>, OpCompare>::const_iterator it;
-  std::vector<Op> opList;
-  std::vector<OpBase*> opBaseList;
   for (it = inEdges.begin(); it != inEdges.end(); it++) {
     int cnt = 0;
     std::set<Edge, EdgeCompare> inList = it->second;
@@ -1227,8 +1237,8 @@ float Graph::run(void)
       for (int j = 0; j < t.numDim; j++)
         size *= t.dim[j];
       if (op.ptr->type == OP_INPUT) {
-        assert(t.data_ptr == NULL);
-        t.data_ptr = (DATATYPE*) model->allocate_memory(size);
+        if (t.data_ptr == NULL)
+          t.data_ptr = (DATATYPE*) model->allocate_memory(size);
       } else {
         assert(t.data_ptr != NULL);
       }
@@ -1426,8 +1436,22 @@ float Graph::run(void)
 
   assert(opList.size() == inEdges.size());
   assert(opList.size() == opBaseList.size());
+}
 
+float Graph::run(void)
+{
+  std::vector<Op> opList;
+  std::vector<OpBase*> opBaseList;
+  instantiate_ops(opList, opBaseList);
   return model->measure_oplist_runtime(opBaseList);
+}
+
+void Graph::evaluate(float* output)
+{
+  std::vector<Op> opList;
+  std::vector<OpBase*> opBaseList;
+  instantiate_ops(opList, opBaseList);
+  model->evaluate(opBaseList, output);
 }
 
 void Graph::print_ops(void)
@@ -1451,76 +1475,4 @@ void Graph::print_costs(void)
          "memory_access(%.4lf) kernel_launches(%d)\n",
          exe_time, flops / 1024.0 / 1024.0 / 1024.0,
          mem_acc * 4.0 / 1024.0 / 1024.0, num_kernels);
-}
-
-void Graph::evaluate(size_t guid, int idx, float* output, bool verbose)
-{
-  Op output_op = find_op_or_fail(guid);
-
-  Op ops[4192];
-  int num_ops = get_operator_list_helper(ops, 4192, true, true, true);
-
-  if (verbose) {
-    // TODO: Replace with call to print_ops
-    printf("===> All ops:\n");
-    for (int i = 0; i < num_ops; i++) {
-      printf("======> %3d) %s\n", i, ops[i].to_string().c_str());
-    }
-  }
-  for (int i = 0; i < num_ops; i++) {
-      if (verbose) {
-        printf("===> Running op %s (%zu)...\n", ops[i].to_string().c_str(), ops[i].guid);
-      }
-      OpType op_type = get_operator_type(ops[i].guid);
-      if (op_type != OP_INPUT && op_type != OP_WEIGHT) {
-          // Assign input edge output pointers to current op's input pointers
-          Edge in_edges[128];
-          int num_in_edges = get_input_edges(in_edges, ops[i].guid);
-          for (int j = 0; j < num_in_edges; j++) {
-            Edge edge = in_edges[j];
-            assert(edge.dstOp.guid == ops[i].guid);
-            if (verbose) {
-             printf("======> Assigning output %d of op %s to input %d of op %s\n",
-                    edge.srcIdx, edge.srcOp.to_string().c_str(), edge.dstIdx,
-                    edge.dstOp.to_string().c_str());
-            }
-            ops[i].ptr->inputs[edge.dstIdx].data_ptr = edge.srcOp.ptr->outputs[edge.srcIdx].data_ptr;
-          }
-      }
-
-      // Run op
-      ops[i].ptr->map();
-      ops[i].ptr->forward(true);
-  }
-
-  // Collect output
-  size_t output_volume = output_op.ptr->outputs[idx].volume();
-  checkCUDA(cudaMemcpy(output, output_op.ptr->outputs[idx].data_ptr,
-                       output_volume * sizeof(float), cudaMemcpyDeviceToHost));
-  if (verbose) {
-      printf("===> Output snippet:\n");
-      for (size_t i = 0; i < output_volume; i++) {
-        if (i == 20)
-          break;
-        if (i % 10 == 0)
-          printf("      ");
-        if ((i+1) % 10 != 0) {
-          printf("%f ", output[i]);
-        } else {
-          printf("%f\n", output[i]);
-        }
-      }
-      printf("\n");
-  }
-
-  // Clean up
-  if (verbose) {
-    printf("===> Cleaning up...\n");
-  }
-  for (int i = 0; i < num_ops; i++) {
-      if (verbose) {
-        printf("======> Unmapping op %s\n", ops[i].to_string().c_str());
-      }
-      ops[i].ptr->unmap();
-  }
 }

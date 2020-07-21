@@ -261,6 +261,7 @@ cdef extern from "taso/ops.h" namespace "taso":
         TensorHandle new_weight(int ndim, const int* dims, const float* data)
         Graph* optimize(float alpha, int budget, bool print_subst)
         int get_input_list(Op* ops, size_t maxNumOps)
+        int get_weight_list(Op* ops, size_t maxNumOps)
         int get_operator_list(Op* ops, size_t maxNumOps)
         int get_input_edges(Edge* edges, size_t guid)
         OpType get_operator_type(size_t guid)
@@ -275,4 +276,4 @@ cdef extern from "taso/ops.h" namespace "taso":
         void print_measurements()
         float total_cost()
         float run()
-        void evaluate(size_t guid, int idx, float* output, bool verbose)
+        void evaluate(float* output)
