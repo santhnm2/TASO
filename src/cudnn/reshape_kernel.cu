@@ -31,6 +31,9 @@ void Reshape::unmap(void)
 
 void Reshape::forward(bool block)
 {
+  size_t outputSize = sizeof(DATATYPE) * outputs[0].volume();
+  checkCUDA(cudaMemcpy(outputs[0].data_ptr, inputs[0].data_ptr, outputSize,
+                       cudaMemcpyDeviceToDevice));
   if (block)
     checkCUDA(cudaDeviceSynchronize());
 }
