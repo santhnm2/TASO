@@ -665,6 +665,7 @@ public:
   bool has_loop(void);
   float total_cost(void);
   void instantiate_ops(std::vector<Op>& opList, std::vector<OpBase*>& opBaseList);
+  float norm(const float* x, const float* y, int n);
   float run();
   void evaluate(float* output);
   void print_ops(void);
