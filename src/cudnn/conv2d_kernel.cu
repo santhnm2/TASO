@@ -67,6 +67,7 @@ void Conv2D::map(void)
   size_t outputSize = sizeof(DATATYPE) * n * c * h * w;
   size_t biasSize = sizeof(DATATYPE) * outputC;
   checkCUDA(cudaMalloc(&biasPtr, biasSize));
+  checkCUDA(cudaMemset(biasPtr, 0, biasSize));
   checkCUDA(cudaMalloc(&outputs[0].data_ptr, outputSize));
 }
 
