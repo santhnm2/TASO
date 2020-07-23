@@ -19,16 +19,29 @@ using namespace taso;
 
 void Transpose::map(void)
 {
-  //TODO: for now the output and input share the same instance
-  outputs[0].data_ptr = inputs[0].data_ptr;
+  size_t outputSize = outputs[0].volume() * sizeof(DATATYPE);
+  checkCUDA(cudaMalloc(&outputs[0].data_ptr, outputSize));
 }
 
 void Transpose::unmap(void)
 {
+  checkCUDA(cudaFree(outputs[0].data_ptr));
 }
 
 void Transpose::forward(bool block)
 {
+  const float alpha = 1.0f;
+  const float beta = 0.0f;
+  int numDim = outputs[0].numDim;
+  int m = inputs[0].dim[numDim-2];
+  int n = inputs[0].dim[numDim-1];
+  cublasOperation_t transA, transB;
+  transA = CUBLAS_OP_T;
+  transB = CUBLAS_OP_N;
+  checkCUDA(cublasSgeam(model->blas, transA, transB, m, n, &alpha,
+                        (float*)inputs[0].data_ptr, n, &beta,
+                        (float*)inputs[0].data_ptr, m,
+                        (float*)outputs[0].data_ptr, m));
   if (block)
     checkCUDA(cudaDeviceSynchronize());
 }
