@@ -20,30 +20,35 @@ using namespace taso;
 __global__
 void elementwise_kernel(int volume,
                         OpType type,
-                        const Tensor& xTensor,
-                        const Tensor& yTensor,
-                        const Tensor& zTensor,
+                        Tensor* xTensor,
+                        Tensor* yTensor,
+                        Tensor* zTensor,
                         const DATATYPE* x,
 			const DATATYPE* y,
 			DATATYPE* z)
 {
   int pos[6];
-  assert(zTensor.numDim <= 6);
+  assert(zTensor->numDim <= 6);
   CUDA_KERNEL_LOOP(id_z, volume)
   {
     int id_x = 0, id_y = 0;
-    for (int j = 0; j < zTensor.numDim; j++) {
-      pos[j] = (id_z / zTensor.stride[j]) % zTensor.dim[j];
+    for (int j = 0; j < zTensor->numDim; j++) {
+      pos[j] = (id_z / zTensor->stride[j]) % zTensor->dim[j];
     }
-    int diff = zTensor.numDim - xTensor.numDim;
-    for (int j = 0; j < xTensor.numDim; j++) {
-      id_x += xTensor.stride[j] * pos[j + diff];
+    int diff = zTensor->numDim - xTensor->numDim;
+    for (int j = 0; j < xTensor->numDim; j++) {
+      id_x += xTensor->stride[j] * pos[j + diff];
     }
-    diff = zTensor.numDim - yTensor.numDim;
-    for (int j = 0; j < yTensor.numDim; j++) {
-      id_y += yTensor.stride[j] * pos[j + diff];
+    diff = zTensor->numDim - yTensor->numDim;
+    for (int j = 0; j < yTensor->numDim; j++) {
+      id_y += yTensor->stride[j] * pos[j + diff];
     }
     switch (type) {
+      case OP_EW_ADD:
+      {
+        z[id_z] = x[id_x] + y[id_y];
+        break;
+      }
       case OP_EW_SUB:
       {
         z[id_z] = x[id_x] - y[id_y];
@@ -170,14 +175,32 @@ void Element::forward(bool block)
     const float beta = 0.0f;
     checkCUDNN(cudnnOpTensor(model->dnn, opDesc, &alpha, in1Tensor, inputs[0].data_ptr,
         &alpha, in2Tensor, inputs[1].data_ptr, &beta, outTensor, outputs[0].data_ptr));
+    if (block)
+      checkCUDA(cudaDeviceSynchronize());
   } else {
+    // Move Tensors to GPU
+    Tensor* xDevice;
+    Tensor* yDevice;
+    Tensor* zDevice;
+    checkCUDA(cudaMalloc((void**) &xDevice, sizeof(Tensor)));
+    checkCUDA(cudaMalloc((void**) &yDevice, sizeof(Tensor)));
+    checkCUDA(cudaMalloc((void**) &zDevice, sizeof(Tensor)));
+    checkCUDA(cudaMemcpy(xDevice, &inputs[0], sizeof(Tensor), cudaMemcpyHostToDevice));
+    checkCUDA(cudaMemcpy(yDevice, &inputs[1], sizeof(Tensor), cudaMemcpyHostToDevice));
+    checkCUDA(cudaMemcpy(zDevice, &outputs[0], sizeof(Tensor), cudaMemcpyHostToDevice));
+    // Run op
     elementwise_kernel<<<GET_BLOCKS(outputs[0].volume()), CUDA_NUM_THREADS>>>(
-        outputs[0].volume(), type, inputs[0], inputs[1], outputs[0],
+        outputs[0].volume(), type, xDevice, yDevice, zDevice,
         (DATATYPE*)inputs[0].data_ptr, (DATATYPE*)inputs[1].data_ptr,
 	(DATATYPE*)outputs[0].data_ptr);
+    if (block)
+      checkCUDA(cudaDeviceSynchronize());
+    // Clean up
+    checkCUDA(cudaFree(xDevice));
+    checkCUDA(cudaFree(yDevice));
+    checkCUDA(cudaFree(zDevice));
+
   }
-  if (block)
-    checkCUDA(cudaDeviceSynchronize());
 }
 
 void Model::measure_element_cost(Element* ele)
@@ -231,12 +254,23 @@ void Model::measure_element_cost(Element* ele)
              ele->inputs[0].dim[3], ele->type, ele->runtime);
   } else {
     // Use our implementation to measure other elementwise operators
+    // Copy Tensors to GPU
+    Tensor* xDevice;
+    Tensor* yDevice;
+    Tensor* zDevice;
+    checkCUDA(cudaMalloc((void**) &xDevice, sizeof(Tensor)));
+    checkCUDA(cudaMalloc((void**) &yDevice, sizeof(Tensor)));
+    checkCUDA(cudaMalloc((void**) &zDevice, sizeof(Tensor)));
+    checkCUDA(cudaMemcpy(xDevice, &ele->inputs[0], sizeof(Tensor), cudaMemcpyHostToDevice));
+    checkCUDA(cudaMemcpy(yDevice, &ele->inputs[1], sizeof(Tensor), cudaMemcpyHostToDevice));
+    checkCUDA(cudaMemcpy(zDevice, &ele->outputs[0], sizeof(Tensor), cudaMemcpyHostToDevice));
+    // Measure cost
     checkCUDA(cudaDeviceSynchronize());
     checkCUDA(cudaEventRecord(startEvent));
     for (int i = 0; i < REPEAT_TIMES; i++) {
       elementwise_kernel<<<GET_BLOCKS(ele->outputs[0].volume()), CUDA_NUM_THREADS>>>(
-          ele->outputs[0].volume(), ele->type, ele->inputs[0], ele->inputs[1],
-          ele->outputs[0], inputPtr, filterPtr, outputPtr);
+          ele->outputs[0].volume(), ele->type, xDevice, yDevice,
+          zDevice, inputPtr, filterPtr, outputPtr);
     }
     checkCUDA(cudaEventRecord(endEvent));
     checkCUDA(cudaEventSynchronize(endEvent));
@@ -247,6 +281,10 @@ void Model::measure_element_cost(Element* ele)
       printf("  measure[Element]: i(%d %d %d %d) type(%d) cost(%.4lf)\n",
              ele->inputs[0].dim[0], ele->inputs[0].dim[1], ele->inputs[0].dim[2],
              ele->inputs[0].dim[3], ele->type, ele->runtime);
+    // Clean up
+    checkCUDA(cudaFree(xDevice));
+    checkCUDA(cudaFree(yDevice));
+    checkCUDA(cudaFree(zDevice));
   }
 }
 
