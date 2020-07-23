@@ -458,6 +458,13 @@ Graph* Graph::optimize(float alpha, int budget, bool print_subst)
   hashmap.insert(hash());
   Graph *bestGraph = this;
   float bestCost = total_cost();
+  float* originalOutput;
+  Op ops[4192];
+  int num_ops = bestGraph->get_operator_list(ops, 4192);
+  assert(ops[num_ops-1].ptr->numOutputs == 1);
+  size_t original_volume = ops[num_ops-1].ptr->outputs[0].volume() * sizeof(float);
+  checkCUDA(cudaMalloc(&originalOutput, original_volume));
+  bestGraph->evaluate(originalOutput);
   //printf("MetaFlow Cost = %.4lfms\n", bestCost);
   //printf("Input graph: end-to-end execution time =\n"
   //       "%.8lf ms (average of 100 runs)\n", run());
@@ -472,6 +479,15 @@ Graph* Graph::optimize(float alpha, int budget, bool print_subst)
   while (!candidates.empty()) {
     Graph *subGraph = candidates.top();
     candidates.pop();
+    float* subGraphOutput;
+    num_ops = subGraph->get_operator_list(ops, 4192);
+    assert(ops[num_ops-1].ptr->numOutputs == 1);
+    size_t volume = ops[num_ops-1].ptr->outputs[0].volume() * sizeof(float);
+    assert(volume == original_volume);
+    checkCUDA(cudaMalloc(&subGraphOutput, volume));
+    subGraph->evaluate(subGraphOutput);
+    float deltaNorm = bestGraph->norm(originalOutput, subGraphOutput, volume);
+    checkCUDA(cudaFree(subGraphOutput));
     if (subGraph->total_cost() < bestCost) {
       delete bestGraph;
       bestCost = subGraph->total_cost();
@@ -482,7 +498,7 @@ Graph* Graph::optimize(float alpha, int budget, bool print_subst)
       break;
     }
     if (counter % 1 == 0) {
-      printf("        [%d] cost = %.4lf bestCost = %.4lf candidates.size() = %zu\n", counter, subGraph->total_cost(), bestCost, candidates.size());
+      printf("        [%d] cost = %.4lf deltaNorm = %.4lf bestCost = %.4lf candidates.size() = %zu\n", counter, subGraph->total_cost(), deltaNorm, bestCost, candidates.size());
       //timer_fs << microsecond_timer() - start_time << ", " << bestCost << std::endl;
     }
     counter ++;
@@ -518,6 +534,7 @@ Graph* Graph::optimize(float alpha, int budget, bool print_subst)
       }
     }
   }
+  checkCUDA(cudaFree(originalOutput));
   return bestGraph;
 }
 
@@ -1401,7 +1418,28 @@ void Graph::instantiate_ops(std::vector<Op>& opList,
         opPtr = new Concat(model, concat->axis, inList.size(), inputs, concat->needCopy);
         break;
       }
+      case OP_FUSE_CONV_BATCHNORM_ALPHA_VAR:
+      {
+        opPtr = new FuseConvBatchNormAlphaVar(model, inputs[0], inputs[1], inputs[2]);
+        break;
+      }
+      case OP_FUSE_CONV_BATCHNORM_BIAS:
+      {
+        opPtr = new FuseConvBatchNormBias(model, inputs[0], inputs[1], inputs[2], inputs[3]);
+        break;
+      }
+      case OP_FUSE_CONV_BATCHNORM:
+      {
+        opPtr = new FuseConvBatchNormBias(model, inputs[0], inputs[1], inputs[2], inputs[3]);
+        break;
+      }
+      case OP_BROADCAST_ADD:
+      {
+        opPtr = new BroadcastAdd(model, inputs[0], inputs[1]);
+        break;
+      }
       default:
+        printf("op = %s\n", op.to_string().c_str());
         printf("op.type = %d\n", op.ptr->type);
         assert(false);
     }
