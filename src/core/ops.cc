@@ -1490,6 +1490,9 @@ void Graph::evaluate(float* output)
   std::vector<OpBase*> opBaseList;
   instantiate_ops(opList, opBaseList);
   model->evaluate(opBaseList, output);
+  for (OpBase* ptr : opBaseList) {
+     ptr->unmap();
+  }
 }
 
 void Graph::print_ops(void)
