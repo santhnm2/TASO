@@ -4,6 +4,7 @@ seq_length = 64
 hidden_dims = 1024
 
 def attention(graph, input, heads):
+    seq_length = input.dim(0)
     d_model = input.dim(1)
     d_k = d_model // heads
     assert input.dim(1) % heads == 0
@@ -15,19 +16,19 @@ def attention(graph, input, heads):
     k = graph.matmul(input, weights[1])
     v = graph.matmul(input, weights[2])
     # reshape query, key, value to multiple heads
-    q = graph.reshape(q, shape=(64,16,64))
-    k = graph.reshape(k, shape=(64,16,64))
-    v = graph.reshape(v, shape=(64,16,64))
+    q = graph.reshape(q, shape=(seq_length,heads,d_k))
+    k = graph.reshape(k, shape=(seq_length,heads,d_k))
+    v = graph.reshape(v, shape=(seq_length,heads,d_k))
     # transpose query, key, value for batched matmul
     q = graph.transpose(q, perm=(1,0,2), shuffle=True)
-    k = graph.transpose(k, perm=(1,0,2), shuffle=True)
+    k = graph.transpose(k, perm=(1,2,0), shuffle=True)
     v = graph.transpose(v, perm=(1,0,2), shuffle=True)
     # perform matrix multiplications
     logits = graph.matmul(q, k)
     output = graph.matmul(logits, v)
     # transpose the output back
     output = graph.transpose(output,perm=(1,0,2), shuffle=True)
-    output = graph.reshape(output, shape=(64, 1024))
+    output = graph.reshape(output, shape=(seq_length, d_model))
 
     # a final linear layer
     linear = graph.new_weight(dims=(d_model, d_model))
