@@ -245,7 +245,7 @@ bool OpBase::get_input_parameter(TNParameter tnp, DIMParameter dim, int* value)
   return true;
 }
 
-std::string Op::op_to_string(const OpBase* ptr)
+std::string Op::op_to_string(const OpBase* ptr) const
 {
   switch (ptr->type) {
     case OP_INPUT:
@@ -419,6 +419,13 @@ TensorHandle Graph::new_weight(const Tensor& weight)
 Graph* Graph::optimize(float alpha, int budget, bool print_subst)
 {
   std::vector<GraphXfer*> xfers;
+  for (int i = 8; i < 11; i++) {
+      int n = int(pow(2, i));
+      for (int j = 2; j < 7; j++) {
+        int d = int(pow(2, j));
+        xfers.push_back(GraphXfer::create_linformer(model, n, 16, d));
+      }
+  }
   for (int i = 1; i < 3; i++)
     for (int j = 0; j < 2; j++) {
       PaddingMode pad_mode = (j == 0) ? PD_MODE_SAME : PD_MODE_VALID;

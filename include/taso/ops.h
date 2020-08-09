@@ -162,8 +162,8 @@ struct Op {
     ptr = op.ptr;
     return *this;
   }
-  std::string op_to_string(const OpBase* ptr);
-  std::string to_string(void)
+  std::string op_to_string(const OpBase* ptr) const;
+  std::string to_string(void) const
   {
     if (ptr != NULL) {
       return op_to_string(ptr) + "_" + std::to_string(guid);
@@ -395,7 +395,7 @@ enum PMParameter {
   PM_STRIDE_W,		// Conv2D, Pool2D
   PM_PAD,		// Conv2D, Pool2D
   PM_ACTI,		// Conv2D, Pool2D
-  PM_NUMDIM,		// Concat, Transpose
+  PM_NUMDIM,		// Concat, Transpose, Weight
   PM_AXIS,		// Concat, Split
   PM_PERM,		// Transpose
   PM_OUTSHUFFLE,	// Transpose
@@ -403,6 +403,10 @@ enum PMParameter {
   PM_AXES,		// Squeeze, Unsqueeze, Reduce*
   PM_KEEP_DIMS,         // Reduce*
   PM_EPSILON,   // BatchNorm
+  PM_DIM_0,     // Weight
+  PM_DIM_1,     // Weight
+  PM_DIM_2,     // Weight
+  PM_STDDEV_INV // Weight
 };
 
 enum TNParameter {
@@ -1433,6 +1437,7 @@ public:
   // Special API for creating weight and input operator
   Op create_input(Tensor _input, OpType _type);
   Op create_weight(Tensor _weight, OpType _type);
+  Op create_weight(int numDim, int* dims, int stddev_inv = 1);
   void measure_conv2d_cost(Conv2D*);
   void measure_matmul_cost(Matmul*);
   void measure_mul_cost(Mul*);

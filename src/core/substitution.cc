@@ -16,6 +16,49 @@
 #include "taso/substitution.h"
 using namespace taso;
 
+GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
+{
+  GraphXfer* subst = new GraphXfer(model);
+
+  // Inputs
+  TensorX q = subst->new_tensor();
+  TensorX k = subst->new_tensor();
+  TensorX v = subst->new_tensor();
+
+  // Constants
+  int e_dims[3] = {h, n, d};
+  int f_dims[3] = {h, d, n};
+
+  // Src ops
+  OpX* logits = subst->create_matmul(q, k, AC_MODE_NONE, true, 3);
+  OpX* output = subst->create_matmul(logits->outputs[0], v,
+                                     AC_MODE_NONE, true, 3);
+
+  // Dst ops
+  OpX* e = subst->create_weight(3, e_dims, d, false);
+  OpX* f = subst->create_weight(3, f_dims, d, false);
+  OpX* projected_k = subst->create_matmul(k, e->outputs[0],
+                                          AC_MODE_NONE, false, 3);
+  OpX* projected_v = subst->create_matmul(f->outputs[0], v,
+                                          AC_MODE_NONE, false, 3);
+  OpX* linformer_logits = subst->create_matmul(q, projected_k->outputs[0],
+                                               AC_MODE_NONE, false, 3);
+  OpX* linformer_output = subst->create_matmul(linformer_logits->outputs[0],
+                                               projected_v->outputs[0],
+                                               AC_MODE_NONE, false, 3);
+
+  subst->map_output(output->outputs[0], linformer_output->outputs[0]);
+  subst->srcOps.push_back(logits);
+  subst->srcOps.push_back(output);
+  subst->dstOps.push_back(e);
+  subst->dstOps.push_back(f);
+  subst->dstOps.push_back(projected_k);
+  subst->dstOps.push_back(projected_v);
+  subst->dstOps.push_back(linformer_logits);
+  subst->dstOps.push_back(linformer_output);
+  return subst;
+}
+
 GraphXfer* create_avg_pool_conv(Model* model)
 {
   GraphXfer* subst = new GraphXfer(model);
@@ -459,6 +502,21 @@ OpX::OpX(const OpX& _op)
   pmConstraints(_op.pmConstraints), tnConstraints(_op.tnConstraints)
 {}
 
+OpX::OpX(OpType _type)
+: type(_type)
+{
+  switch (type) {
+    case OP_WEIGHT:
+    {
+      TensorX out(this, 0);
+      outputs.push_back(out);
+      break;
+    }
+    default:
+      assert(false);
+  }
+}
+
 OpX::OpX(OpType _type, TensorX in1, int numOutputs)
 : type(_type)
 {
@@ -752,11 +810,23 @@ OpX* GraphXfer::create_pool2d_avg(TensorX input, TensorX weight,
 
 OpX* GraphXfer::create_matmul(TensorX input, TensorX weight,
                               ActiMode activation,
-                              bool isSrcOp)
+                              bool isSrcOp,
+                              int numDim)
 {
   OpX* matmul = new OpX(OP_MATMUL, input, weight);
   matmul->add_pm_constraint(COMPARE_EQ, PM_ACTI, activation);
-  matmul->add_input_constraint(COMPARE_EQ, IN_1, DIM_0, IN_0, DIM_1);
+  if (numDim == 2) {
+    matmul->add_input_constraint(COMPARE_EQ, IN_0, DIM_ND, 2);
+    matmul->add_input_constraint(COMPARE_EQ, IN_1, DIM_ND, 2);
+    matmul->add_input_constraint(COMPARE_EQ, IN_1, DIM_0, IN_0, DIM_1);
+  } else if (numDim == 3) {
+    matmul->add_input_constraint(COMPARE_EQ, IN_0, DIM_ND, 3);
+    matmul->add_input_constraint(COMPARE_EQ, IN_1, DIM_ND, 3);
+    matmul->add_input_constraint(COMPARE_EQ, IN_1, DIM_1, IN_0, DIM_2);
+  } else {
+    printf("Matmul with > 3 dimensions not implemented!\n");
+    assert(false);
+  }
   return matmul;
 }
 
@@ -765,6 +835,19 @@ OpX* GraphXfer::create_mul(TensorX x, TensorX y, bool isSrcOp)
   OpX* mul = new OpX(OP_MUL, x, y);
   mul->add_input_constraint(COMPARE_EQ, IN_0, DIM_ND, 0);
   return mul;
+}
+
+OpX* GraphXfer::create_weight(int numDim, int* dims, int stddev_inv,
+                              bool isSrcOp)
+{
+  OpX* weight = new OpX(OP_WEIGHT);
+  weight->add_pm_constraint(COMPARE_EQ, PM_NUMDIM, numDim);
+  weight->add_pm_constraint(COMPARE_EQ, PM_DIM_0, dims[0]);
+  weight->add_pm_constraint(COMPARE_EQ, PM_DIM_1, dims[1]);
+  weight->add_pm_constraint(COMPARE_EQ, PM_STDDEV_INV, stddev_inv);
+  if (numDim > 2)
+    weight->add_pm_constraint(COMPARE_EQ, PM_DIM_2, dims[2]);
+  return weight;
 }
 
 OpX* GraphXfer::create_transpose(TensorX input, int numDim, int* perm,
@@ -1190,6 +1273,8 @@ Graph* GraphXfer::create_new_graph(Graph* graph)
   // Step 3: add edges for mapped ops
   for (dstIt = dstOps.begin(); dstIt != dstOps.end(); dstIt ++) {
     OpX* dstOp = *dstIt;
+    if (dstOp->inputs.size() == 0)
+      newGraph->inEdges[dstOp->mapOp];
     for (size_t i = 0; i < dstOp->inputs.size(); i++)
       if (dstOp->inputs[i].op == NULL) {
         // unmapped src -> mapped dst
@@ -1343,6 +1428,20 @@ bool GraphXfer::create_new_operator(const OpX* opx, Op& op)
       assert(opx->inputs.size() == 1);
       Tensor input = opx->inputs[0].to_tensor(this);
       op = model->get_or_create_activation(input, opx->type, true);
+      break;
+    }
+    case OP_WEIGHT:
+    {
+      assert(opx->inputs.size() == 0);
+      int numDim, stddev_inv;
+      assert(opx->get_pm_constraint(PM_NUMDIM, numDim));
+      int dims[numDim];
+      assert(opx->get_pm_constraint(PM_DIM_0, dims[0]));
+      assert(opx->get_pm_constraint(PM_DIM_1, dims[1]));
+      if (numDim > 2)
+        assert(opx->get_pm_constraint(PM_DIM_2, dims[2]));
+      assert(opx->get_pm_constraint(PM_STDDEV_INV, stddev_inv));
+      op = model->create_weight(numDim, dims, stddev_inv);
       break;
     }
     default:

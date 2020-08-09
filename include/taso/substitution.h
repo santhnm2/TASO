@@ -67,6 +67,7 @@ struct TensorXCompare {
 class OpX {
 public:
   OpX(const OpX& _op);
+  OpX(OpType _type);
   OpX(OpType _type, TensorX input0, int numOutputs = 1);
   OpX(OpType _type, TensorX input0, TensorX input1);
   OpX(OpType _type, TensorX input0, TensorX input1, TensorX input2);
@@ -177,7 +178,8 @@ public:
                          ActiMode activation,
                          bool isSrcOp = true);
   OpX* create_matmul(TensorX input, TensorX weight,
-                     ActiMode activation, bool isSrcOp = true);
+                     ActiMode activation, bool isSrcOp = true,
+                     int numDim = 2);
   OpX* create_mul(TensorX x, TensorX y, bool isSrcOp = true);
   OpX* create_transpose(TensorX input, int numDim, int* perm, int shuffle);
   OpX* create_enlarge(TensorX w1, TensorX w2, bool isSrcOp = true);
@@ -185,6 +187,7 @@ public:
   OpX* create_concat(int axis, int numDim, TensorX in1, TensorX in2, bool isSrcOp = true);
   OpX* create_concat(int axis, int numDim, int n, TensorX* ins, bool isSrcOp = true);
   OpX* create_split(TensorX input, int axis, int n, bool isSrcOp = true);
+  OpX* create_weight(int numDim, int* dims, int stddev_inv = 1, bool isSrcOp = true);
   void add_src_op(SrcOp* op);
   void add_dst_op(DstOp* op);
   void add_src_edge(SrcOp* src, SrcOp* tgt, int srcIdx = 0, int dstIdx = 0);
@@ -201,6 +204,7 @@ public:
   bool create_new_operator(const OpX* opx, Op& op);
 
   // built-in substitutions
+  static GraphXfer* create_linformer(Model* model, int n, int h, int d);
   static GraphXfer* create_conv_relu(Model* model, int strideH, int strideW, PaddingMode padding);
   static GraphXfer* create_conv_batch(Model* model, int strideH, int strideW, PaddingMode padding);
   static GraphXfer* create_conv_mul(Model* model, int strideH, int strideW, PaddingMode padding);
