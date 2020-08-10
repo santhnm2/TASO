@@ -646,7 +646,7 @@ public:
 
   // Helper Functions for Cython
   Op find_op_or_fail(size_t guid);
-  Graph* optimize(float alpha, int budget, bool print_subst);
+  Graph* optimize(float alpha, int budget, bool original_subst, bool print_subst);
   Graph* preprocess_weights(void);
   int get_input_list(Op* opList, size_t maxNumOps);
   int get_weight_list(Op* opList, size_t maxNumOps);

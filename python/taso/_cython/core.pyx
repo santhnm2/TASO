@@ -546,8 +546,8 @@ cdef class PyGraph:
         t = ctypes.cast(<unsigned long long>handle, ctypes.c_void_p)
         return PyTensor(t)
 
-    def optimize(self, float alpha, int budget, bool print_subst):
-        cdef Graph* new_graph = self.p_graph.optimize(alpha, budget, print_subst)
+    def optimize(self, float alpha, int budget, bool original_subst, bool print_subst):
+        cdef Graph* new_graph = self.p_graph.optimize(alpha, budget, original_subst, print_subst)
         graph = ctypes.cast(<unsigned long long>new_graph, ctypes.c_void_p)
         return PyGraph(graph)
 

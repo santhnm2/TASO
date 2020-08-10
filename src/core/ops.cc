@@ -416,7 +416,7 @@ TensorHandle Graph::new_weight(const Tensor& weight)
   return t;
 }
 
-Graph* Graph::optimize(float alpha, int budget, bool print_subst)
+Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_subst)
 {
   std::vector<GraphXfer*> xfers;
   for (int i = 6; i < 11; i++) {
@@ -426,38 +426,40 @@ Graph* Graph::optimize(float alpha, int budget, bool print_subst)
       xfers.push_back(GraphXfer::create_linformer(model, n, 16, d));
     }
   }
-  for (int i = 1; i < 3; i++)
-    for (int j = 0; j < 2; j++) {
-      PaddingMode pad_mode = (j == 0) ? PD_MODE_SAME : PD_MODE_VALID;
-      xfers.push_back(GraphXfer::create_conv_relu(model, i, i, pad_mode));
-      xfers.push_back(GraphXfer::create_conv_batch(model, i, i, pad_mode));
-      xfers.push_back(GraphXfer::create_conv_mul(model, i, i, pad_mode));
-      //xfers.push_back(GraphXfer::create_conv_add(model, i, i, pad_mode));
-    }
-  xfers.push_back(GraphXfer::create_enlarge_merge_convs(model, AC_MODE_NONE));
-  xfers.push_back(GraphXfer::create_enlarge_merge_convs(model, AC_MODE_RELU));
-  xfers.push_back(GraphXfer::create_merge_group_convs(model, 1, 1, AC_MODE_NONE));
-  xfers.push_back(GraphXfer::create_merge_group_convs(model, 1, 1, AC_MODE_RELU));
-  xfers.push_back(GraphXfer::create_merge_group_convs(model, 2, 2, AC_MODE_NONE));
-  xfers.push_back(GraphXfer::create_merge_group_convs(model, 2, 2, AC_MODE_RELU));
+  if (original_subst) {
+      for (int i = 1; i < 3; i++)
+        for (int j = 0; j < 2; j++) {
+          PaddingMode pad_mode = (j == 0) ? PD_MODE_SAME : PD_MODE_VALID;
+          xfers.push_back(GraphXfer::create_conv_relu(model, i, i, pad_mode));
+          xfers.push_back(GraphXfer::create_conv_batch(model, i, i, pad_mode));
+          xfers.push_back(GraphXfer::create_conv_mul(model, i, i, pad_mode));
+          //xfers.push_back(GraphXfer::create_conv_add(model, i, i, pad_mode));
+        }
+      xfers.push_back(GraphXfer::create_enlarge_merge_convs(model, AC_MODE_NONE));
+      xfers.push_back(GraphXfer::create_enlarge_merge_convs(model, AC_MODE_RELU));
+      xfers.push_back(GraphXfer::create_merge_group_convs(model, 1, 1, AC_MODE_NONE));
+      xfers.push_back(GraphXfer::create_merge_group_convs(model, 1, 1, AC_MODE_RELU));
+      xfers.push_back(GraphXfer::create_merge_group_convs(model, 2, 2, AC_MODE_NONE));
+      xfers.push_back(GraphXfer::create_merge_group_convs(model, 2, 2, AC_MODE_RELU));
 
-  //xfers.push_back(create_avg_pool_conv(model));
-  //xfers.push_back(create_two_pools(model));
-  //xfers.push_back(create_merge_seperable_convs(model));
-  char* taso_path = getenv("TASO_HOME");
-  if (taso_path == NULL) {
-    fprintf(stderr, "Error: environment variable TASO_HOME is not set. "
-           "Please set TASO_HOME to the home directory of TASO source code.\n");
-    assert(false);
+      //xfers.push_back(create_avg_pool_conv(model));
+      //xfers.push_back(create_two_pools(model));
+      //xfers.push_back(create_merge_seperable_convs(model));
+      char* taso_path = getenv("TASO_HOME");
+      if (taso_path == NULL) {
+        fprintf(stderr, "Error: environment variable TASO_HOME is not set. "
+               "Please set TASO_HOME to the home directory of TASO source code.\n");
+        assert(false);
+      }
+      std::string graph_subst_file = std::string(taso_path) + "/graph_subst.pb";
+      GraphXfer::load_graph_xfer_from_pb_file(model, xfers, graph_subst_file);
+      //xfers.push_back(create_fuse_conv_batch_xfer(model));
+      //xfers.push_back(create_fuse_conv_relu_xfer(model));
+      //xfers.push_back(create_merge_conv_xfer(model));
+      //xfers.push_back(create_exclusive_concat_xfer(model));
+      //xfers.push_back(create_enlarge_conv_xfer(model));
+      //xfers.push_back(create_resnet_merge_xfer(model));
   }
-  std::string graph_subst_file = std::string(taso_path) + "/graph_subst.pb";
-  GraphXfer::load_graph_xfer_from_pb_file(model, xfers, graph_subst_file);
-  //xfers.push_back(create_fuse_conv_batch_xfer(model));
-  //xfers.push_back(create_fuse_conv_relu_xfer(model));
-  //xfers.push_back(create_merge_conv_xfer(model));
-  //xfers.push_back(create_exclusive_concat_xfer(model));
-  //xfers.push_back(create_enlarge_conv_xfer(model));
-  //xfers.push_back(create_resnet_merge_xfer(model));
 
   std::priority_queue<Graph*, std::vector<Graph*>, GraphCompare> candidates;
   std::set<size_t> hashmap;

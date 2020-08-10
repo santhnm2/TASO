@@ -941,8 +941,9 @@ def export_onnx(graph):
     onnx_model = helper.make_model(onnx_graph, producer_name='TASO Optimized Model')
     return onnx_model
 
-def optimize(graph, alpha = 1.0, budget = 1000, print_subst = False):
-    return graph.optimize(alpha, budget, print_subst)
+def optimize(graph, alpha = 1.0, budget = 1000, original_subst = False,
+             print_subst = False):
+    return graph.optimize(alpha, budget, original_subst, print_subst)
 
 # Current TASO Version
 __version__ = "0.1.0"
