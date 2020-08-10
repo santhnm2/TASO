@@ -1273,8 +1273,12 @@ Graph* GraphXfer::create_new_graph(Graph* graph)
   // Step 3: add edges for mapped ops
   for (dstIt = dstOps.begin(); dstIt != dstOps.end(); dstIt ++) {
     OpX* dstOp = *dstIt;
-    if (dstOp->inputs.size() == 0)
-      newGraph->inEdges[dstOp->mapOp];
+    if (dstOp->inputs.size() == 0) {
+      // Add edge from dst weight tensor to weight op
+      assert(dstOp->mapOp.ptr->type == OP_WEIGHT);
+      Tensor w = dstOp->mapOp.ptr->inputs[0];
+      newGraph->add_edge(w.op, dstOp->mapOp, w.idx, 0);
+    }
     for (size_t i = 0; i < dstOp->inputs.size(); i++)
       if (dstOp->inputs[i].op == NULL) {
         // unmapped src -> mapped dst

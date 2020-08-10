@@ -419,12 +419,12 @@ TensorHandle Graph::new_weight(const Tensor& weight)
 Graph* Graph::optimize(float alpha, int budget, bool print_subst)
 {
   std::vector<GraphXfer*> xfers;
-  for (int i = 8; i < 11; i++) {
-      int n = int(pow(2, i));
-      for (int j = 2; j < 7; j++) {
-        int d = int(pow(2, j));
-        xfers.push_back(GraphXfer::create_linformer(model, n, 16, d));
-      }
+  for (int i = 6; i < 11; i++) {
+    int n = int(pow(2, i));
+    for (int j = 2; j < 8; j++) {
+      int d = int(pow(2, j));
+      xfers.push_back(GraphXfer::create_linformer(model, n, 16, d));
+    }
   }
   for (int i = 1; i < 3; i++)
     for (int j = 0; j < 2; j++) {
@@ -1499,15 +1499,6 @@ void Graph::evaluate(float* output)
   model->evaluate(opBaseList, output);
   for (OpBase* ptr : opBaseList) {
      ptr->unmap();
-  }
-}
-
-void Graph::print_ops(void)
-{
-  std::map<Op, std::set<Edge, EdgeCompare>, OpCompare>::const_iterator it;
-  for (it = inEdges.begin(); it != inEdges.end(); it++) {
-    Op op = it->first;
-    printf("%s\n", op.to_string().c_str());
   }
 }
 
