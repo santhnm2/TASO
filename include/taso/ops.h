@@ -128,6 +128,7 @@ enum OpType {
   OP_LOGICAL_NOT, //https://github.com/onnx/onnx/blob/master/docs/Operators.md#Not
   OP_SQRT, //https://github.com/onnx/onnx/blob/master/docs/Operators.md#Sqrt
   OP_LEAKYRELU,
+  OP_SOFTMAX, //https://github.com/onnx/onnx/blob/master/docs/Operators.md#Softmax
   OP_SLICE, //https://github.com/onnx/onnx/blob/master/docs/Operators.md#Slice
   OP_RESIZE, //https://github.com/onnx/onnx/blob/master/docs/Operators.md#Resize
   OP_PRELU, //https://github.com/onnx/onnx/blob/master/docs/Operators.md#PRelu
@@ -622,6 +623,7 @@ public:
                      const std::vector<int>& _steps);
   TensorHandle sigmoid(const TensorHandle _input,
                        bool _inPlace = true);
+  TensorHandle softmax(const TensorHandle _input);
   //void split(Tensor _input, int axis, int c1, int c2, Tensor* outputs);
   //void split(Tensor _input, int axis, int num, const int* sizes, Tensor* outputs);
   void split(const TensorHandle _input, int _axis,
@@ -1069,6 +1071,20 @@ public:
   std::vector<int> start, end, axes, steps;
 };
 
+class Softmax : public OpBase {
+public:
+  Softmax(Model* _model, const Tensor& _input);
+  ~Softmax(void);
+  bool use_kernel(void) const;
+  void forward(bool block);
+  void map(void);
+  void unmap(void);
+  void collect_costs(float& exe_time, float& flops, float& mem_acc, int& num_kernels);
+#ifdef USE_CUDNN
+  cudnnTensorDescriptor_t inputTensor, outputTensor;
+#endif
+};
+
 class Split : public OpBase {
 public:
   Split(Model* _model, const Tensor& _input, int axis, const std::vector<int>& _sizes);
@@ -1330,6 +1346,12 @@ struct SliceKey {
   int keys[KEY_LENGTH];
 };
 
+struct SoftmaxKey {
+  static const int KEY_LENGTH = Tensor::MAX_KEY_LENGTH;
+  SoftmaxKey(const Tensor& _input);
+  int keys[KEY_LENGTH];
+};
+
 struct SqueezeKey {
   static const int KEY_LENGTH = Tensor::MAX_KEY_LENGTH + MAX_DIM;
   SqueezeKey(const Tensor& input, const std::vector<int>& axes);
@@ -1420,6 +1442,7 @@ public:
                          const std::vector<int>& _end,
                          const std::vector<int>& _axes,
                          const std::vector<int>& _steps);
+  Op get_or_create_softmax(const Tensor& _input);
   Op get_or_create_squeeze(const Tensor& input, const std::vector<int>& axes);
   Op get_or_create_split(const Tensor& _input, int _axis, const std::vector<int>& _sizes);
   Op get_or_create_split(const Tensor& _input, int axis, int n);
@@ -1454,6 +1477,7 @@ public:
   void measure_concat_cost(Concat*);
   void measure_shape_cost(Shape*);
   void measure_slice_cost(Slice*);
+  void measure_softmax_cost(Softmax*);
   void measure_split_cost(Split*);
   void measure_element_cost(Element*);
   void measure_elementwise_unary_cost(ElementWiseUnary*);
@@ -1516,6 +1540,7 @@ public:
   std::map<ReshapeKey, Reshape*, KeyCompare<ReshapeKey> > reshape;
   std::map<ResizeKey, Resize*, KeyCompare<ResizeKey> > resize;
   std::map<ShapeKey, Shape*, KeyCompare<ShapeKey> > shape;
+  std::map<SoftmaxKey, Softmax*, KeyCompare<SoftmaxKey> > softmax;
   std::map<SliceKey, Slice*, KeyCompare<SliceKey> > slice;
   std::map<SplitKey, Split*, KeyCompare<SplitKey> > split;
   std::map<SqueezeKey, Squeeze*, KeyCompare<SqueezeKey> > squeeze;

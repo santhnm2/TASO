@@ -154,6 +154,7 @@ op_table[OP_EXP] = "Exp"
 op_table[OP_ROUND] = "Round"
 op_table[OP_LOG] = "Log"
 op_table[OP_LOGICAL_NOT] = "Not"
+op_table[OP_SOFTMAX] = "Softmax"
 op_table[OP_SQRT] = "Sqrt"
 op_table[OP_SLICE] = "Slice"
 op_table[OP_RESIZE] = "Resize"
@@ -455,6 +456,11 @@ cdef class PyGraph:
             for i in range(len(start)):
                 csteps[i] = 1
         cdef TensorHandle handle = self.p_graph.slice(input.ctensor, cstart, cend, caxes, csteps)
+        t = ctypes.cast(<unsigned long long>handle, ctypes.c_void_p)
+        return PyTensor(t)
+
+    def softmax(self, PyTensor input):
+        cdef TensorHandle handle = self.p_graph.softmax(input.ctensor)
         t = ctypes.cast(<unsigned long long>handle, ctypes.c_void_p)
         return PyTensor(t)
 

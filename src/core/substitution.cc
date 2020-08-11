@@ -24,6 +24,7 @@ GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
   TensorX q = subst->new_tensor();
   TensorX k = subst->new_tensor();
   TensorX v = subst->new_tensor();
+  TensorX scale_factor = subst->new_tensor();
 
   // Constants
   int e_dims[3] = {h, n, d};
@@ -31,7 +32,10 @@ GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
 
   // Src ops
   OpX* logits = subst->create_matmul(q, k, AC_MODE_NONE, true, 3);
-  OpX* output = subst->create_matmul(logits->outputs[0], v,
+  OpX* softmax = subst->create_softmax(logits->outputs[0], true);
+  OpX* div = subst->create_element(softmax->outputs[0], scale_factor,
+                                   OP_EW_DIV, true);
+  OpX* output = subst->create_matmul(div->outputs[0], v,
                                      AC_MODE_NONE, true, 3);
 
   // Dst ops
@@ -43,18 +47,26 @@ GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
                                           AC_MODE_NONE, false, 3);
   OpX* linformer_logits = subst->create_matmul(q, projected_k->outputs[0],
                                                AC_MODE_NONE, false, 3);
-  OpX* linformer_output = subst->create_matmul(linformer_logits->outputs[0],
+  OpX* linformer_softmax = subst->create_softmax(linformer_logits->outputs[0],
+                                                 false);
+  OpX* linformer_div = subst->create_element(linformer_softmax->outputs[0],
+                                             scale_factor, OP_EW_DIV, false);
+  OpX* linformer_output = subst->create_matmul(linformer_div->outputs[0],
                                                projected_v->outputs[0],
                                                AC_MODE_NONE, false, 3);
 
   subst->map_output(output->outputs[0], linformer_output->outputs[0]);
   subst->srcOps.push_back(logits);
+  subst->srcOps.push_back(softmax);
+  subst->srcOps.push_back(div);
   subst->srcOps.push_back(output);
   subst->dstOps.push_back(e);
   subst->dstOps.push_back(f);
   subst->dstOps.push_back(projected_k);
   subst->dstOps.push_back(projected_v);
   subst->dstOps.push_back(linformer_logits);
+  subst->dstOps.push_back(linformer_softmax);
+  subst->dstOps.push_back(linformer_div);
   subst->dstOps.push_back(linformer_output);
   return subst;
 }
@@ -527,6 +539,7 @@ OpX::OpX(OpType _type, TensorX in1, int numOutputs)
     case OP_RELU:
     case OP_TANH:
     case OP_SIGMOID:
+    case OP_SOFTMAX:
     case OP_MERGE_GCONV:
     {
       TensorX out(this, 0);
@@ -554,6 +567,7 @@ OpX::OpX(OpType _type, TensorX in1, TensorX in2)
     case OP_CONV2D:
     case OP_EW_ADD:
     case OP_EW_MUL:
+    case OP_EW_DIV:
     case OP_POOL2D_AVG:
     case OP_CONCAT:
     case OP_MATMUL:
@@ -848,6 +862,12 @@ OpX* GraphXfer::create_weight(int numDim, int* dims, int stddev_inv,
   if (numDim > 2)
     weight->add_pm_constraint(COMPARE_EQ, PM_DIM_2, dims[2]);
   return weight;
+}
+
+OpX* GraphXfer::create_softmax(TensorX input, bool isSrcOp)
+{
+  OpX* softmax = new OpX(OP_SOFTMAX, input);
+  return softmax;
 }
 
 OpX* GraphXfer::create_transpose(TensorX input, int numDim, int* perm,
@@ -1317,6 +1337,7 @@ bool GraphXfer::create_new_operator(const OpX* opx, Op& op)
     }
     case OP_EW_ADD:
     case OP_EW_MUL:
+    case OP_EW_DIV:
     {
       assert(opx->inputs.size() == 2);
       Tensor input0 = opx->inputs[0].to_tensor(this);
@@ -1371,6 +1392,13 @@ bool GraphXfer::create_new_operator(const OpX* opx, Op& op)
       assert(opx->get_pm_constraint(PM_ACTI, activation));
       op = model->get_or_create_matmul(input, weight,
                                        (ActiMode)activation);
+      break;
+    }
+    case OP_SOFTMAX:
+    {
+      assert(opx->inputs.size() == 1);
+      Tensor input = opx->inputs[0].to_tensor(this);
+      op = model->get_or_create_softmax(input);
       break;
     }
     case OP_TRANSPOSE:

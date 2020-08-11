@@ -181,6 +181,7 @@ public:
                      ActiMode activation, bool isSrcOp = true,
                      int numDim = 2);
   OpX* create_mul(TensorX x, TensorX y, bool isSrcOp = true);
+  OpX* create_softmax(TensorX input, bool srcOp = true);
   OpX* create_transpose(TensorX input, int numDim, int* perm, int shuffle);
   OpX* create_enlarge(TensorX w1, TensorX w2, bool isSrcOp = true);
   OpX* create_merge_gconv(TensorX w, int count, bool isSrcOp = true);

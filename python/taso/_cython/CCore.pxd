@@ -79,6 +79,7 @@ cdef extern from "taso/ops.h" namespace "taso":
         OP_PAD,
         OP_SHAPE,
         OP_SIZE,
+        OP_SOFTMAX,
         OP_TOPK,
         OP_WHERE,
         OP_CEIL,
@@ -243,6 +244,7 @@ cdef extern from "taso/ops.h" namespace "taso":
                            const vector[int] end,
                            const vector[int] axse,
                            const vector[int] steps)
+        TensorHandle softmax(const TensorHandle input)
         void split(const TensorHandle input, int axis,
                    const vector[int] sizes, TensorHandle* outputs)
         void split_equal(const TensorHandle input, int axis,

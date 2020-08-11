@@ -328,6 +328,8 @@ std::string Op::op_to_string(const OpBase* ptr) const
       return "Shape";
     case OP_SIZE:
       return "Size";
+    case OP_SOFTMAX:
+      return "Softmax";
     case OP_TOPK:
       return "TopK";
     case OP_WHERE:
@@ -419,6 +421,11 @@ TensorHandle Graph::new_weight(const Tensor& weight)
 Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_subst)
 {
   std::vector<GraphXfer*> xfers;
+  int n = 512;
+  int h = 16;
+  int d = 8;
+  xfers.push_back(GraphXfer::create_linformer(model, n, h, d));
+  /*
   for (int i = 6; i < 11; i++) {
     int n = int(pow(2, i));
     for (int j = 2; j < 8; j++) {
@@ -426,6 +433,7 @@ Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_
       xfers.push_back(GraphXfer::create_linformer(model, n, 16, d));
     }
   }
+  */
   if (original_subst) {
       for (int i = 1; i < 3; i++)
         for (int j = 0; j < 2; j++) {
@@ -1358,6 +1366,7 @@ void Graph::instantiate_ops(std::vector<Op>& opList,
       }
       case OP_EW_ADD:
       case OP_EW_MUL:
+      case OP_EW_DIV:
       {
         //Element* element = (Element*) op.ptr;
         assert(inList.size() == 2);
@@ -1425,6 +1434,12 @@ void Graph::instantiate_ops(std::vector<Op>& opList,
       {
         Concat* concat = (Concat*) op.ptr;
         opPtr = new Concat(model, concat->axis, inList.size(), inputs, concat->needCopy);
+        break;
+      }
+      case OP_SOFTMAX:
+      {
+        assert(inList.size() == 1);
+        opPtr = new Softmax(model, inputs[0]);
         break;
       }
       case OP_FUSE_CONV_BATCHNORM_ALPHA_VAR:
