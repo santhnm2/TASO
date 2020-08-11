@@ -123,7 +123,7 @@ void Matmul::collect_costs(float& exe_time, float& flops,
   // cost metrics
   exe_time += runtime;
   assert(inputs[0].numDim == inputs[1].numDim);
-  flops += outputSize * inputs[0].dim[inputs[0].numDim-1];
+  flops += ((float) outputSize) * inputs[0].dim[inputs[0].numDim-1];
   mem_acc += inputSize;
   num_kernels += 1;
   printf("        cost[Matmul]: %s %s cost(%.4lf) total_cost(%.4lf)\n",

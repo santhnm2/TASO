@@ -24,11 +24,14 @@ void elementwise_kernel(int volume,
                         Tensor* yTensor,
                         Tensor* zTensor,
                         const DATATYPE* x,
-			const DATATYPE* y,
-			DATATYPE* z)
+			            const DATATYPE* y,
+			            DATATYPE* z)
 {
   int pos[6];
   assert(zTensor->numDim <= 6);
+  size_t yVolume = 1;
+  for (int i = 0; i < yTensor->numDim; i++)
+    yVolume *= yTensor->dim[i];
   CUDA_KERNEL_LOOP(id_z, volume)
   {
     int id_x = 0, id_y = 0;
@@ -39,9 +42,13 @@ void elementwise_kernel(int volume,
     for (int j = 0; j < xTensor->numDim; j++) {
       id_x += xTensor->stride[j] * pos[j + diff];
     }
-    diff = zTensor->numDim - yTensor->numDim;
-    for (int j = 0; j < yTensor->numDim; j++) {
-      id_y += yTensor->stride[j] * pos[j + diff];
+    if (yVolume == 1) {
+      id_y = 0;
+    } else {
+      diff = zTensor->numDim - yTensor->numDim;
+      for (int j = 0; j < yTensor->numDim; j++) {
+        id_y += yTensor->stride[j] * pos[j + diff];
+      }
     }
     switch (type) {
       case OP_EW_ADD:
@@ -56,7 +63,8 @@ void elementwise_kernel(int volume,
       }
       case OP_EW_DIV:
       {
-        z[id_z] = x[id_x] / y[id_y];
+        assert(!std::isnan(y[id_y]));
+        z[id_z] = x[id_x] / (y[id_y] == 0.0 ? y[id_y] + 0.00001 : y[id_y]);
         break;
       }
       case OP_EW_EQUAL:
