@@ -32,10 +32,10 @@ GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
 
   // Src ops
   OpX* logits = subst->create_matmul(q, k, AC_MODE_NONE, true, 3);
-  OpX* softmax = subst->create_softmax(logits->outputs[0], true);
-  OpX* div = subst->create_element(softmax->outputs[0], scale_factor,
+  OpX* div = subst->create_element(logits->outputs[0], scale_factor,
                                    OP_EW_DIV, true);
-  OpX* output = subst->create_matmul(div->outputs[0], v,
+  OpX* softmax = subst->create_softmax(div->outputs[0], true);
+  OpX* output = subst->create_matmul(softmax->outputs[0], v,
                                      AC_MODE_NONE, true, 3);
 
   // Dst ops
@@ -47,26 +47,26 @@ GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
                                           AC_MODE_NONE, false, 3);
   OpX* linformer_logits = subst->create_matmul(q, projected_k->outputs[0],
                                                AC_MODE_NONE, false, 3);
-  OpX* linformer_softmax = subst->create_softmax(linformer_logits->outputs[0],
-                                                 false);
-  OpX* linformer_div = subst->create_element(linformer_softmax->outputs[0],
+  OpX* linformer_div = subst->create_element(linformer_logits->outputs[0],
                                              scale_factor, OP_EW_DIV, false);
-  OpX* linformer_output = subst->create_matmul(linformer_div->outputs[0],
+  OpX* linformer_softmax = subst->create_softmax(linformer_div->outputs[0],
+                                                 false);
+  OpX* linformer_output = subst->create_matmul(linformer_softmax->outputs[0],
                                                projected_v->outputs[0],
                                                AC_MODE_NONE, false, 3);
 
   subst->map_output(output->outputs[0], linformer_output->outputs[0]);
   subst->srcOps.push_back(logits);
-  subst->srcOps.push_back(softmax);
   subst->srcOps.push_back(div);
+  subst->srcOps.push_back(softmax);
   subst->srcOps.push_back(output);
   subst->dstOps.push_back(e);
   subst->dstOps.push_back(f);
   subst->dstOps.push_back(projected_k);
   subst->dstOps.push_back(projected_v);
   subst->dstOps.push_back(linformer_logits);
-  subst->dstOps.push_back(linformer_softmax);
   subst->dstOps.push_back(linformer_div);
+  subst->dstOps.push_back(linformer_softmax);
   subst->dstOps.push_back(linformer_output);
   return subst;
 }
