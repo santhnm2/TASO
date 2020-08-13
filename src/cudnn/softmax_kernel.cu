@@ -108,13 +108,18 @@ void Softmax::forward(bool block)
 
 void Model::measure_softmax_cost(Softmax* softmax)
 {
+  // TODO: Measure softmax cost when we have a CUDA implementation
+  softmax->runtime = 0;
+  /*
   float milliseconds;
   if (softmax->use_kernel()) {
       int axis = 2;
       checkCUDA(cudaDeviceSynchronize());
       checkCUDA(cudaEventRecord(startEvent));
-      softmax_kernel(softmax->inputs[0], inputPtr,
-                     softmax->outputs[0], outputPtr, axis);
+      for (int i = 0; i < REPEAT_TIMES; i++) {
+        softmax_kernel(softmax->inputs[0], inputPtr,
+                       softmax->outputs[0], outputPtr, axis);
+      }
   } else {
       const float alpha = 1.0f;
       const float beta = 0.0f;
@@ -126,9 +131,11 @@ void Model::measure_softmax_cost(Softmax* softmax)
       assert(outputPtr != NULL);
       checkCUDA(cudaDeviceSynchronize());
       checkCUDA(cudaEventRecord(startEvent));
-      checkCUDNN(cudnnSoftmaxForward(dnn, algo, mode, &alpha, inputTensor,
-                                     inputPtr, &beta, outputTensor,
-                                     outputPtr));
+      for (int i = 0; i < REPEAT_TIMES; i++) {
+        checkCUDNN(cudnnSoftmaxForward(dnn, algo, mode, &alpha, inputTensor,
+                                       inputPtr, &beta, outputTensor,
+                                       outputPtr));
+      }
   }
   checkCUDA(cudaEventRecord(endEvent));
   checkCUDA(cudaEventSynchronize(endEvent));
@@ -139,4 +146,5 @@ void Model::measure_softmax_cost(Softmax* softmax)
            softmax->inputs[0].dim[0], softmax->inputs[0].dim[1],
            softmax->inputs[0].dim[2], softmax->inputs[0].dim[3],
            softmax->runtime);
+  */
 }

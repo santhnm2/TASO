@@ -64,7 +64,7 @@ void elementwise_kernel(int volume,
       case OP_EW_DIV:
       {
         assert(!std::isnan(y[id_y]));
-        z[id_z] = x[id_x] / (y[id_y] == 0.0 ? y[id_y] + 0.00001 : y[id_y]);
+        z[id_z] = x[id_x] / (y[id_y] == 0.0 ? y[id_y] + 0.000000001 : y[id_y]);
         break;
       }
       case OP_EW_EQUAL:

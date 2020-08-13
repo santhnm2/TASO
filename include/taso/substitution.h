@@ -36,6 +36,13 @@ struct PMConstraint {
   int value;
 };
 
+struct PMFConstraint {
+  PMFConstraint(Compare comp, PMParameter para, float value);
+  Compare comp;
+  PMParameter para;
+  float value;
+};
+
 struct TNConstraint {
   TNConstraint(Compare comp, TNParameter para, DIMParameter dim, int value);
   TNConstraint(Compare comp, TNParameter para1, DIMParameter dim1,
@@ -75,14 +82,17 @@ public:
   OpX(OpType _type, TensorX input0, TensorX input1, TensorX input2, TensorX input3, TensorX input4);
   OpX(OpType _type, int n, TensorX* ins);
   bool add_pm_constraint(Compare comp, PMParameter para, int value);
+  bool add_pmf_constraint(Compare comp, PMParameter para, float value);
   bool add_input_constraint(Compare, TNParameter, DIMParameter, int);
   bool add_input_constraint(Compare, TNParameter, DIMParameter, TNParameter, DIMParameter);
   bool get_pm_constraint(PMParameter para, int& value) const;
+  bool get_pmf_constraint(PMParameter para, float& value) const;
 public:
   OpType type;
   Op mapOp;
   std::vector<TensorX> inputs, outputs;
   std::vector<PMConstraint> pmConstraints;
+  std::vector<PMFConstraint> pmfConstraints;
   std::vector<TNConstraint> tnConstraints;
 };
 
@@ -188,7 +198,7 @@ public:
   OpX* create_concat(int axis, int numDim, TensorX in1, TensorX in2, bool isSrcOp = true);
   OpX* create_concat(int axis, int numDim, int n, TensorX* ins, bool isSrcOp = true);
   OpX* create_split(TensorX input, int axis, int n, bool isSrcOp = true);
-  OpX* create_weight(int numDim, int* dims, int stddev_inv = 1, bool isSrcOp = true);
+  OpX* create_weight(int numDim, int* dims, float stddev = 1.0, float coeff = 1, bool isSrcOp = true);
   void add_src_op(SrcOp* op);
   void add_dst_op(DstOp* op);
   void add_src_edge(SrcOp* src, SrcOp* tgt, int srcIdx = 0, int dstIdx = 0);
@@ -200,7 +210,7 @@ public:
   bool map_output(TensorX src, TensorX dst);
   void run(int depth, Graph* graph,
            std::priority_queue<Graph*, std::vector<Graph*>, GraphCompare>&,
-           std::set<size_t>&, float threshold, int maxNumOps);
+           std::set<size_t>&, float threshold, int maxNumOps, float* originalOutput);
   Graph* create_new_graph(Graph* graph);
   bool create_new_operator(const OpX* opx, Op& op);
 

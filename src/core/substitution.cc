@@ -14,6 +14,7 @@
  */
 
 #include "taso/substitution.h"
+#include "taso/cuda_helper.h"
 using namespace taso;
 
 GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
@@ -32,41 +33,45 @@ GraphXfer* GraphXfer::create_linformer(Model* model, int n, int h, int d)
 
   // Src ops
   OpX* logits = subst->create_matmul(q, k, AC_MODE_NONE, true, 3);
+  /*
   OpX* div = subst->create_element(logits->outputs[0], scale_factor,
                                    OP_EW_DIV, true);
   OpX* softmax = subst->create_softmax(div->outputs[0], true);
-  OpX* output = subst->create_matmul(softmax->outputs[0], v,
+  */
+  OpX* output = subst->create_matmul(logits->outputs[0], v,
                                      AC_MODE_NONE, true, 3);
 
   // Dst ops
-  OpX* e = subst->create_weight(3, e_dims, d, false);
-  OpX* f = subst->create_weight(3, f_dims, d, false);
+  OpX* e = subst->create_weight(3, e_dims, 1.0 / pow(d, 0.5), 1, false);
+  OpX* f = subst->create_weight(3, f_dims, 1.0 / pow(d, 0.5), 1, false);
   OpX* projected_k = subst->create_matmul(k, e->outputs[0],
                                           AC_MODE_NONE, false, 3);
   OpX* projected_v = subst->create_matmul(f->outputs[0], v,
                                           AC_MODE_NONE, false, 3);
   OpX* linformer_logits = subst->create_matmul(q, projected_k->outputs[0],
                                                AC_MODE_NONE, false, 3);
+  /*
   OpX* linformer_div = subst->create_element(linformer_logits->outputs[0],
                                              scale_factor, OP_EW_DIV, false);
   OpX* linformer_softmax = subst->create_softmax(linformer_div->outputs[0],
                                                  false);
-  OpX* linformer_output = subst->create_matmul(linformer_softmax->outputs[0],
+  */
+  OpX* linformer_output = subst->create_matmul(linformer_logits->outputs[0],
                                                projected_v->outputs[0],
                                                AC_MODE_NONE, false, 3);
 
   subst->map_output(output->outputs[0], linformer_output->outputs[0]);
   subst->srcOps.push_back(logits);
-  subst->srcOps.push_back(div);
-  subst->srcOps.push_back(softmax);
+  //subst->srcOps.push_back(div);
+  //subst->srcOps.push_back(softmax);
   subst->srcOps.push_back(output);
   subst->dstOps.push_back(e);
   subst->dstOps.push_back(f);
   subst->dstOps.push_back(projected_k);
   subst->dstOps.push_back(projected_v);
   subst->dstOps.push_back(linformer_logits);
-  subst->dstOps.push_back(linformer_div);
-  subst->dstOps.push_back(linformer_softmax);
+  //subst->dstOps.push_back(linformer_div);
+  //subst->dstOps.push_back(linformer_softmax);
   subst->dstOps.push_back(linformer_output);
   return subst;
 }
@@ -482,6 +487,9 @@ DIMParameter to_dim_parameter(int n)
 PMConstraint::PMConstraint(Compare c, PMParameter p, int v)
 : comp(c), para(p), value(v) {}
 
+PMFConstraint::PMFConstraint(Compare c, PMParameter p, float v)
+: comp(c), para(p), value(v) {}
+
 TNConstraint::TNConstraint(Compare c, TNParameter p, DIMParameter d, int v)
 : singlePara(true), comp(c), para1(p), dim1(d), value(v) {}
 
@@ -650,6 +658,13 @@ bool OpX::add_pm_constraint(Compare comp, PMParameter para, int value)
   return true;
 }
 
+bool OpX::add_pmf_constraint(Compare comp, PMParameter para, float value)
+{
+  PMFConstraint pmfc(comp, para, value);
+  pmfConstraints.push_back(pmfc);
+  return true;
+}
+
 bool OpX::add_input_constraint(Compare comp, TNParameter para,
                                DIMParameter dim, int value)
 {
@@ -673,6 +688,17 @@ bool OpX::get_pm_constraint(PMParameter para, int& value) const
     if ((pmConstraints[i].comp == COMPARE_EQ)
     && (pmConstraints[i].para == para)) {
       value = pmConstraints[i].value;
+      return true;
+    }
+  return false;
+}
+
+bool OpX::get_pmf_constraint(PMParameter para, float& value) const
+{
+  for (size_t i = 0; i < pmConstraints.size(); i++)
+    if ((pmfConstraints[i].comp == COMPARE_EQ)
+    && (pmfConstraints[i].para == para)) {
+      value = pmfConstraints[i].value;
       return true;
     }
   return false;
@@ -851,14 +877,15 @@ OpX* GraphXfer::create_mul(TensorX x, TensorX y, bool isSrcOp)
   return mul;
 }
 
-OpX* GraphXfer::create_weight(int numDim, int* dims, int stddev_inv,
-                              bool isSrcOp)
+OpX* GraphXfer::create_weight(int numDim, int* dims, float stddev,
+                              float coeff, bool isSrcOp)
 {
   OpX* weight = new OpX(OP_WEIGHT);
   weight->add_pm_constraint(COMPARE_EQ, PM_NUMDIM, numDim);
   weight->add_pm_constraint(COMPARE_EQ, PM_DIM_0, dims[0]);
   weight->add_pm_constraint(COMPARE_EQ, PM_DIM_1, dims[1]);
-  weight->add_pm_constraint(COMPARE_EQ, PM_STDDEV_INV, stddev_inv);
+  weight->add_pmf_constraint(COMPARE_EQ, PM_STDDEV, stddev);
+  weight->add_pmf_constraint(COMPARE_EQ, PM_COEFF, coeff);
   if (numDim > 2)
     weight->add_pm_constraint(COMPARE_EQ, PM_DIM_2, dims[2]);
   return weight;
@@ -1188,10 +1215,12 @@ void GraphXfer::unmatch(OpX* srcOp, Op op, Graph* graph)
 
 void GraphXfer::run(int depth, Graph* graph,
                     std::priority_queue<Graph*, std::vector<Graph*>, GraphCompare>& candidates,
-                    std::set<size_t>& hashmap, float threshold, int maxNumOps)
+                    std::set<size_t>& hashmap, float threshold, int maxNumOps,
+                    float* originalOutput)
 {
   //printf("run: depth(%d) srcOps.size(%zu) graph.size(%zu) candidates(%zu)\n", depth, srcOps.size(), graph->inEdges.size(), candidates.size());
   if (depth >= (int)srcOps.size()) {
+    //printf("depth %d: FLAG 1a\n", depth);
     // Create dst operators
     bool pass = true;
     std::vector<OpX*>::const_iterator dstIt;
@@ -1201,6 +1230,7 @@ void GraphXfer::run(int depth, Graph* graph,
         pass = (pass & create_new_operator(dstOp, dstOp->mapOp));
       }
     if (!pass) return;
+    //printf("depth %d: FLAG 2\n", depth);
     // Check that output tensors with external edges are mapped
     std::map<Op, OpX*, OpCompare>::const_iterator opIt;
     for (opIt = mappedOps.begin(); opIt != mappedOps.end(); opIt++) {
@@ -1218,6 +1248,7 @@ void GraphXfer::run(int depth, Graph* graph,
           }
         }
     }
+    //printf("depth %d: FLAG 3\n", depth);
     // Generate a new graph by applying xfer rule
     Graph* newGraph = create_new_graph(graph);
     // Check that the new graph should not have any loop
@@ -1226,17 +1257,33 @@ void GraphXfer::run(int depth, Graph* graph,
       delete newGraph;
       return;
     }
+    //printf("depth %d: FLAG 4\n", depth);
     // TODO: remove me for better performance
     assert(newGraph->check_correctness());
     if (newGraph->total_cost() < threshold && (int)newGraph->inEdges.size() < maxNumOps) {
+      //printf("depth %d: FLAG 5a\n", depth);
+      /*
+      float* newGraphOutput;
+      Op ops[4192];
+      int num_ops = newGraph->get_operator_list(ops, 4192);
+      assert(ops[num_ops-1].ptr->numOutputs == 1);
+      size_t volume = ops[num_ops-1].ptr->outputs[0].volume() * sizeof(float);
+      checkCUDA(cudaMalloc(&newGraphOutput, volume));
+      newGraph->evaluate(newGraphOutput);
+      float deltaNorm = newGraph->norm(originalOutput, newGraphOutput, volume);
+      checkCUDA(cudaFree(newGraphOutput));
+      printf("deltaNorm: %.4f\n", deltaNorm);
+      */
       if (hashmap.find(newGraph->hash()) == hashmap.end()) {
         hashmap.insert(newGraph->hash());
         candidates.push(newGraph);
       }
     } else {
+      //printf("depth %d: FLAG 5b\n", depth);
       delete newGraph;
     }
   } else {
+    //printf("depth %d: FLAG 1b\n", depth);
     OpX* srcOp = srcOps[depth];
     std::map<Op, std::set<Edge, EdgeCompare>, OpCompare>::const_iterator it;
     for (it = graph->inEdges.begin(); it != graph->inEdges.end(); it++) {
@@ -1246,10 +1293,11 @@ void GraphXfer::run(int depth, Graph* graph,
         Op op = it->first;
         // Check mapOutput
         match(srcOp, op, graph);
-        run(depth + 1, graph, candidates, hashmap, threshold, maxNumOps);
+        run(depth + 1, graph, candidates, hashmap, threshold, maxNumOps, originalOutput);
         unmatch(srcOp, op, graph);
       }
     }
+    //printf("depth %d: FLAG 7\n", depth);
   }
 }
 
@@ -1465,15 +1513,17 @@ bool GraphXfer::create_new_operator(const OpX* opx, Op& op)
     case OP_WEIGHT:
     {
       assert(opx->inputs.size() == 0);
-      int numDim, stddev_inv;
+      int numDim;
+      float stddev, coeff;
       assert(opx->get_pm_constraint(PM_NUMDIM, numDim));
       int dims[numDim];
       assert(opx->get_pm_constraint(PM_DIM_0, dims[0]));
       assert(opx->get_pm_constraint(PM_DIM_1, dims[1]));
       if (numDim > 2)
         assert(opx->get_pm_constraint(PM_DIM_2, dims[2]));
-      assert(opx->get_pm_constraint(PM_STDDEV_INV, stddev_inv));
-      op = model->create_weight(numDim, dims, stddev_inv);
+      assert(opx->get_pmf_constraint(PM_STDDEV, stddev));
+      assert(opx->get_pmf_constraint(PM_COEFF, coeff));
+      op = model->create_weight(numDim, dims, stddev, coeff);
       break;
     }
     default:

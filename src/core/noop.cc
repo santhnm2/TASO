@@ -14,7 +14,6 @@
  */
 
 #include "taso/ops.h"
-#include <random>
 using namespace taso;
 
 TensorHandle Graph::input_wrapper(const TensorHandle _input)
@@ -56,10 +55,10 @@ Op Model::create_input(Tensor _input, OpType _type)
   return ret;
 }
 
-Op Model::create_weight(int numDim, int* dims, int stddev_inv)
+Op Model::create_weight(int numDim, int* dims, float stddev, float coeff)
 {
-  std::default_random_engine generator;
-  std::normal_distribution<float> distribution(0, 1.0 / stddev_inv);
+  std::normal_distribution<float> distribution(0, stddev);
+  distribution.reset();
   size_t volume = 1;
   for (int i = 0; i < numDim; i++)
     volume *= dims[i];
@@ -67,7 +66,7 @@ Op Model::create_weight(int numDim, int* dims, int stddev_inv)
   // TODO: Get data from random normal distribution
   float* data_host = (float*) malloc(size);
   for (size_t i = 0; i < volume; i++) {
-    data_host[i] = distribution(generator);
+    data_host[i] = coeff * distribution(generator);
   }
   float* data_device = (float*) allocate_memory(size, data_host);
   free(data_host);

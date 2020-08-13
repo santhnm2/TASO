@@ -421,9 +421,9 @@ TensorHandle Graph::new_weight(const Tensor& weight)
 Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_subst)
 {
   std::vector<GraphXfer*> xfers;
-  int n = 512;
-  int h = 16;
-  int d = 8;
+  int n = 2048;
+  int h = 12;
+  int d = 128;
   xfers.push_back(GraphXfer::create_linformer(model, n, h, d));
   /*
   for (int i = 6; i < 11; i++) {
@@ -475,7 +475,7 @@ Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_
   hashmap.insert(hash());
   Graph *bestGraph = this;
   float bestCost = total_cost();
-  float* originalOutput;
+  float* originalOutput = NULL;
   Op ops[4192];
   int num_ops = bestGraph->get_operator_list(ops, 4192);
   assert(ops[num_ops-1].ptr->numOutputs == 1);
@@ -515,6 +515,7 @@ Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_
       break;
     }
     if (counter % 1 == 0) {
+      //printf("        [%d] cost = %.4lf bestCost = %.4lf candidates.size() = %zu\n", counter, subGraph->total_cost(), bestCost, candidates.size());
       printf("        [%d] cost = %.4lf deltaNorm = %.4lf bestCost = %.4lf candidates.size() = %zu\n", counter, subGraph->total_cost(), deltaNorm, bestCost, candidates.size());
       //timer_fs << microsecond_timer() - start_time << ", " << bestCost << std::endl;
     }
@@ -526,7 +527,8 @@ Graph* Graph::optimize(float alpha, int budget, bool original_subst, bool print_
       //for (size_t j = 0; j < xfers[i]->dstOps.size(); j++) {
       //  printf("dstOps[%zu]: type(%d)\n", j, xfers[i]->dstOps[j]->type);
       //}
-      xfers[i]->run(0, subGraph, candidates, hashmap, bestCost * alpha, 2 * maxNumOps);
+      xfers[i]->run(0, subGraph, candidates, hashmap, bestCost * alpha, 2 * maxNumOps,
+                    originalOutput);
     }
     if (bestGraph != subGraph) {
       delete subGraph;

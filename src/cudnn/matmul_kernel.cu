@@ -65,6 +65,7 @@ void Matmul::forward(bool block)
   int k = inputs[0].dim[numDim-1];
   cublasOperation_t transA, transB;
   int lda, ldb, ldc;
+  /*
   if (inputs[0].stride[numDim-2] == 1) {
     transA = CUBLAS_OP_N;
     lda = inputs[0].stride[numDim-1];
@@ -82,11 +83,17 @@ void Matmul::forward(bool block)
     ldb = inputs[1].stride[numDim-2];
   }
   ldc = outputs[0].stride[numDim-1];
+  */
+  transA = CUBLAS_OP_N;
+  transB = CUBLAS_OP_N;
+  lda = n;
+  ldb = k;
+  ldc = n;
   if (numDim == 2) {
     // Normal 2D Matmul
-    checkCUDA(cublasSgemm(model->blas, transA, transB,
-        m, n, k, &alpha, (float*)inputs[0].data_ptr, lda,
-        (float*)inputs[1].data_ptr, ldb, &beta, (float*)outputs[0].data_ptr, ldc));
+    checkCUDA(cublasSgemm(model->blas, transB, transA,
+        n, m, k, &alpha, (float*)inputs[1].data_ptr, lda,
+        (float*)inputs[0].data_ptr, ldb, &beta, (float*)outputs[0].data_ptr, ldc));
   } else {
     // Batched Matmul
     int strideA = inputs[0].stride[numDim-3];
@@ -95,9 +102,9 @@ void Matmul::forward(bool block)
     int batch = 1;
     for (int i = 0; i < numDim-2; i++)
       batch *= outputs[0].dim[i];
-    checkCUDA(cublasSgemmStridedBatched(model->blas, transA, transB,
-        m, n, k, &alpha, (float*)inputs[0].data_ptr, lda, strideA,
-        (float*)inputs[1].data_ptr, ldb, strideB,
+    checkCUDA(cublasSgemmStridedBatched(model->blas, transB, transA,
+        n, m, k, &alpha, (float*)inputs[1].data_ptr, lda, strideB,
+        (float*)inputs[0].data_ptr, ldb, strideA,
         &beta, (float*)outputs[0].data_ptr, ldc, strideC, batch));
   }
   if (activation != AC_MODE_NONE)

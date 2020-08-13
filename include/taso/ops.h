@@ -46,6 +46,7 @@ using DNNLNet = std::vector<std::pair<dnnl::primitive, std::unordered_map<int, d
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <random>
 using namespace std;
 
 namespace taso {
@@ -407,7 +408,8 @@ enum PMParameter {
   PM_DIM_0,     // Weight
   PM_DIM_1,     // Weight
   PM_DIM_2,     // Weight
-  PM_STDDEV_INV // Weight
+  PM_STDDEV,    // Weight
+  PM_COEFF      // Weight
 };
 
 enum TNParameter {
@@ -1460,7 +1462,7 @@ public:
   // Special API for creating weight and input operator
   Op create_input(Tensor _input, OpType _type);
   Op create_weight(Tensor _weight, OpType _type);
-  Op create_weight(int numDim, int* dims, int stddev_inv = 1);
+  Op create_weight(int numDim, int* dims, float stddev = 1, float coeff = 1);
   void measure_conv2d_cost(Conv2D*);
   void measure_matmul_cost(Matmul*);
   void measure_mul_cost(Mul*);
@@ -1496,6 +1498,7 @@ public:
   size_t global_unique_id;
   size_t workSpaceSize;
   void* workSpace;
+  std::default_random_engine generator;
 #ifdef USE_CUDNN
   cudnnHandle_t dnn;
   cublasHandle_t blas;

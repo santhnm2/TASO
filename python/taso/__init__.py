@@ -562,6 +562,12 @@ def _slice(op, graph, tensors, initializer):
     outputs = graph.slice(inputs[0], start, end, axes, steps)
     return outputs
 
+def _softmax(op, graph, tensors, initializer):
+    inputs = _get_inputs(op, graph, tensors, intitializer)
+    assert len(inputs) == 1, "Softmax requires exactly one input"
+    outputs = graph.softmax(inputs[0])
+    return outputs
+
 def _split(op, graph, tensors, initializer):
     inputs = _get_inputs(op, graph, tensors, initializer)
     assert len(inputs) == 1, "Split requires exactly one input"
@@ -713,6 +719,7 @@ xf_operators['GlobalAveragePool'] = _globalavgpool2d
 xf_operators['Shape'] = _shape
 xf_operators['Size'] = _size
 xf_operators['Slice'] = _slice
+xf_operators['Softmax'] = _softmax
 xf_operators['Split'] = _split
 xf_operators['Sqrt'] = _sqrt
 xf_operators['Squeeze'] = _squeeze
@@ -828,6 +835,7 @@ input_weight_names['AveragePool'] = ['input']
 input_weight_names['BatchNormalization'] = ['input', 'scale', 'bias', 'mean', 'var']
 input_weight_names['Concat'] = ['input1', 'input2', 'input3', 'input4', 'input5', 'input6']
 input_weight_names['Conv'] = ['input', 'weight', 'bias']
+input_weight_names['Div'] = ['input1', 'input2']
 input_weight_names['MatMul'] = ['input', 'weight']
 input_weight_names['Mul'] = ['input1', 'input2']
 input_weight_names['Reshape'] = ['input', 'shape']
@@ -863,6 +871,7 @@ operator_attrs["Squeeze"] = ['axes']
 operator_attrs['StridedSlice'] = []
 operator_attrs['Relu'] = []
 operator_attrs['Reshape'] = []
+operator_attrs['Softmax'] = []
 operator_attrs['Tanh'] = []
 operator_attrs['Transpose'] = ['perm']
 operator_attrs['Unsqueeze'] = ['axes']
